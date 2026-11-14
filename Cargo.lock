@@ -492,6 +492,8 @@ name = "rust-view-cli"
 version = "0.1.0"
 dependencies = [
  "rust-view-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
