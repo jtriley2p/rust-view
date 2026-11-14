@@ -1,0 +1,208 @@
+{
+  "version": 1,
+  "totals": {
+    "files": 7,
+    "lines": { "code": 342, "test": 138, "comment": 50, "blank": 82 },
+    "tests": { "count": 16, "ignored": 1 },
+    "items": {
+      "struct": 5, "enum": 2, "union": 0, "trait": 1, "impl": 8, "fn": 6, "method": 21,
+      "const": 3, "static": 0, "type": 1, "mod": 4, "macro": 0
+    },
+    "functional": { "closures": 12, "combinators": 25, "higher_order_fns": 2 },
+    "suppressions": { "todo": 2, "unimplemented": 1, "unreachable": 1, "allow": 1 },
+    "error_handling": { "unwrap": 5, "expect": 2, "panic": 1, "propagate": 28 }
+  },
+  "crates": [
+    {
+      "name": "kv-core",
+      "path": "crates/core",
+      "totals": {
+        "files": 5,
+        "lines": { "code": 263, "test": 126, "comment": 41, "blank": 67 },
+        "tests": { "count": 14, "ignored": 1 },
+        "items": {
+          "struct": 4, "enum": 1, "union": 0, "trait": 1, "impl": 7, "fn": 3, "method": 20,
+          "const": 3, "static": 0, "type": 1, "mod": 3, "macro": 0
+        },
+        "functional": { "closures": 11, "combinators": 22, "higher_order_fns": 2 },
+        "suppressions": { "todo": 2, "unimplemented": 0, "unreachable": 1, "allow": 1 },
+        "error_handling": { "unwrap": 5, "expect": 2, "panic": 1, "propagate": 20 }
+      },
+      "dependencies": [
+        { "name": "serde", "req": "1", "kind": "normal", "source": "registry" },
+        { "name": "thiserror", "req": "2", "kind": "normal", "source": "registry" },
+        { "name": "tempfile", "req": "3", "kind": "dev", "source": "registry" }
+      ],
+      "files": [
+        {
+          "path": "crates/core/src/lib.rs",
+          "module": "crate",
+          "lines": { "code": 10, "test": 0, "comment": 4, "blank": 3 },
+          "tests": { "count": 0, "ignored": 0 },
+          "items": {
+            "struct": 0, "enum": 0, "union": 0, "trait": 0, "impl": 0, "fn": 0, "method": 0,
+            "const": 0, "static": 0, "type": 1, "mod": 3, "macro": 0
+          },
+          "functional": { "closures": 0, "combinators": 0, "higher_order_fns": 0 },
+          "suppressions": { "todo": 0, "unimplemented": 0, "unreachable": 0, "allow": 0 },
+          "error_handling": { "unwrap": 0, "expect": 0, "panic": 0, "propagate": 0 },
+          "imports": [
+            { "module": "crate::error", "file": "crates/core/src/error.rs", "names": ["Error"] },
+            { "module": "crate::store", "file": "crates/core/src/store.rs", "names": ["Entry", "Store"] }
+          ],
+          "reexports": [
+            {
+              "name": "Entry",
+              "trace": [
+                { "module": "crate::store", "file": "crates/core/src/store.rs", "name": "Entry" },
+                { "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Entry" }
+              ],
+              "end": "definition"
+            },
+            {
+              "name": "Error",
+              "trace": [{ "module": "crate::error", "file": "crates/core/src/error.rs", "name": "Error" }],
+              "end": "definition"
+            },
+            {
+              "name": "Store",
+              "trace": [{ "module": "crate::store", "file": "crates/core/src/store.rs", "name": "Store" }],
+              "end": "definition"
+            },
+            {
+              "name": "Serialize",
+              "trace": [{ "module": "serde", "file": null, "name": "Serialize" }],
+              "end": "external"
+            }
+          ]
+        },
+        {
+          "path": "crates/core/src/error.rs",
+          "module": "crate::error",
+          "lines": { "code": 24, "test": 0, "comment": 5, "blank": 4 },
+          "tests": { "count": 0, "ignored": 0 },
+          "items": {
+            "struct": 0, "enum": 1, "union": 0, "trait": 0, "impl": 2, "fn": 0, "method": 2,
+            "const": 0, "static": 0, "type": 0, "mod": 0, "macro": 0
+          },
+          "functional": { "closures": 0, "combinators": 0, "higher_order_fns": 0 },
+          "suppressions": { "todo": 0, "unimplemented": 0, "unreachable": 0, "allow": 0 },
+          "error_handling": { "unwrap": 0, "expect": 0, "panic": 0, "propagate": 0 },
+          "imports": [],
+          "reexports": []
+        },
+        {
+          "path": "crates/core/src/store.rs",
+          "module": "crate::store",
+          "lines": { "code": 142, "test": 58, "comment": 21, "blank": 33 },
+          "tests": { "count": 7, "ignored": 1 },
+          "items": {
+            "struct": 2, "enum": 0, "union": 0, "trait": 1, "impl": 3, "fn": 2, "method": 11,
+            "const": 1, "static": 0, "type": 0, "mod": 0, "macro": 0
+          },
+          "functional": { "closures": 9, "combinators": 17, "higher_order_fns": 2 },
+          "suppressions": { "todo": 0, "unimplemented": 0, "unreachable": 1, "allow": 1 },
+          "error_handling": { "unwrap": 1, "expect": 2, "panic": 0, "propagate": 14 },
+          "imports": [
+            { "module": "crate::error", "file": "crates/core/src/error.rs", "names": ["Error"] },
+            { "module": "crate::wal", "file": "crates/core/src/wal.rs", "names": ["Entry", "Wal"] }
+          ],
+          "reexports": [
+            {
+              "name": "Entry",
+              "trace": [{ "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Entry" }],
+              "end": "definition"
+            }
+          ]
+        },
+        {
+          "path": "crates/core/src/wal.rs",
+          "module": "crate::wal",
+          "lines": { "code": 87, "test": 22, "comment": 9, "blank": 18 },
+          "tests": { "count": 3, "ignored": 0 },
+          "items": {
+            "struct": 2, "enum": 0, "union": 0, "trait": 0, "impl": 2, "fn": 1, "method": 7,
+            "const": 2, "static": 0, "type": 0, "mod": 0, "macro": 0
+          },
+          "functional": { "closures": 2, "combinators": 5, "higher_order_fns": 0 },
+          "suppressions": { "todo": 2, "unimplemented": 0, "unreachable": 0, "allow": 0 },
+          "error_handling": { "unwrap": 4, "expect": 0, "panic": 1, "propagate": 6 },
+          "imports": [
+            { "module": "crate::error", "file": "crates/core/src/error.rs", "names": ["Error"] }
+          ],
+          "reexports": []
+        },
+        {
+          "path": "crates/core/tests/roundtrip.rs",
+          "module": "crate",
+          "lines": { "code": 0, "test": 46, "comment": 2, "blank": 9 },
+          "tests": { "count": 4, "ignored": 0 },
+          "items": {
+            "struct": 0, "enum": 0, "union": 0, "trait": 0, "impl": 0, "fn": 0, "method": 0,
+            "const": 0, "static": 0, "type": 0, "mod": 0, "macro": 0
+          },
+          "functional": { "closures": 0, "combinators": 0, "higher_order_fns": 0 },
+          "suppressions": { "todo": 0, "unimplemented": 0, "unreachable": 0, "allow": 0 },
+          "error_handling": { "unwrap": 0, "expect": 0, "panic": 0, "propagate": 0 },
+          "imports": [],
+          "reexports": []
+        }
+      ]
+    },
+    {
+      "name": "kv-cli",
+      "path": "crates/cli",
+      "totals": {
+        "files": 2,
+        "lines": { "code": 79, "test": 12, "comment": 9, "blank": 15 },
+        "tests": { "count": 2, "ignored": 0 },
+        "items": {
+          "struct": 1, "enum": 1, "union": 0, "trait": 0, "impl": 1, "fn": 3, "method": 1,
+          "const": 0, "static": 0, "type": 0, "mod": 1, "macro": 0
+        },
+        "functional": { "closures": 1, "combinators": 3, "higher_order_fns": 0 },
+        "suppressions": { "todo": 0, "unimplemented": 1, "unreachable": 0, "allow": 0 },
+        "error_handling": { "unwrap": 0, "expect": 0, "panic": 0, "propagate": 8 }
+      },
+      "dependencies": [
+        { "name": "kv-core", "req": null, "kind": "normal", "source": "path" },
+        { "name": "clap", "req": "4", "kind": "normal", "source": "registry" },
+        { "name": "anyhow", "req": "1", "kind": "normal", "source": "registry" }
+      ],
+      "files": [
+        {
+          "path": "crates/cli/src/main.rs",
+          "module": "crate",
+          "lines": { "code": 48, "test": 0, "comment": 3, "blank": 8 },
+          "tests": { "count": 0, "ignored": 0 },
+          "items": {
+            "struct": 0, "enum": 0, "union": 0, "trait": 0, "impl": 0, "fn": 3, "method": 0,
+            "const": 0, "static": 0, "type": 0, "mod": 1, "macro": 0
+          },
+          "functional": { "closures": 1, "combinators": 3, "higher_order_fns": 0 },
+          "suppressions": { "todo": 0, "unimplemented": 1, "unreachable": 0, "allow": 0 },
+          "error_handling": { "unwrap": 0, "expect": 0, "panic": 0, "propagate": 8 },
+          "imports": [
+            { "module": "crate::args", "file": "crates/cli/src/args.rs", "names": ["Args", "Command"] }
+          ],
+          "reexports": []
+        },
+        {
+          "path": "crates/cli/src/args.rs",
+          "module": "crate::args",
+          "lines": { "code": 31, "test": 12, "comment": 6, "blank": 7 },
+          "tests": { "count": 2, "ignored": 0 },
+          "items": {
+            "struct": 1, "enum": 1, "union": 0, "trait": 0, "impl": 1, "fn": 0, "method": 1,
+            "const": 0, "static": 0, "type": 0, "mod": 0, "macro": 0
+          },
+          "functional": { "closures": 0, "combinators": 0, "higher_order_fns": 0 },
+          "suppressions": { "todo": 0, "unimplemented": 0, "unreachable": 0, "allow": 0 },
+          "error_handling": { "unwrap": 0, "expect": 0, "panic": 0, "propagate": 0 },
+          "imports": [],
+          "reexports": []
+        }
+      ]
+    }
+  ]
+}

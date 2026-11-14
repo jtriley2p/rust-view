@@ -1,0 +1,11 @@
+[package]
+name = "rust-view-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "rust-view"
+path = "src/main.rs"
+
+[dependencies]
+rust-view-core.workspace = true

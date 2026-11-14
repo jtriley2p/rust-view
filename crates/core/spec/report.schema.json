@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "rust-view report",
+  "description": "Static metrics for a cargo workspace. Paths are relative to the workspace root and `/`-separated. Test code is `#[cfg(test)]` items, `#[test]` fns, and files under `tests/`. Every per-file metric except `lines.test` and `tests` excludes test code.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "totals", "crates"],
+  "properties": {
+    "version": { "description": "Schema version. Bumped on any breaking change.", "const": 1 },
+    "totals": { "description": "Sum over all crates.", "$ref": "#/$defs/totals" },
+    "crates": { "type": "array", "items": { "$ref": "#/$defs/crate" } }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "crate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "totals", "dependencies", "files"],
+      "properties": {
+        "name": { "description": "Package name from Cargo.toml.", "type": "string" },
+        "path": { "description": "Package directory; `.` for a root package.", "type": "string" },
+        "totals": { "description": "Sum over `files`.", "$ref": "#/$defs/totals" },
+        "dependencies": { "type": "array", "items": { "$ref": "#/$defs/dependency" } },
+        "files": { "type": "array", "items": { "$ref": "#/$defs/file" } }
+      }
+    },
+    "dependency": {
+      "description": "A dependency declared in the package's Cargo.toml. A `path` dependency whose name matches another entry in `crates` is workspace-internal.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "req", "kind", "source"],
+      "properties": {
+        "name": { "type": "string" },
+        "req": { "description": "Version requirement as written (workspace-inherited values resolved); null if none.", "type": ["string", "null"] },
+        "kind": { "enum": ["normal", "dev", "build"] },
+        "source": { "enum": ["registry", "path", "git"] }
+      }
+    },
+    "totals": {
+      "description": "Per-file metrics summed field by field.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "lines", "tests", "items", "functional", "suppressions", "error_handling"],
+      "properties": {
+        "files": { "description": "Number of files summed.", "$ref": "#/$defs/count" },
+        "lines": { "$ref": "#/$defs/lines" },
+        "tests": { "$ref": "#/$defs/tests" },
+        "items": { "$ref": "#/$defs/items" },
+        "functional": { "$ref": "#/$defs/functional" },
+        "suppressions": { "$ref": "#/$defs/suppressions" },
+        "error_handling": { "$ref": "#/$defs/error_handling" }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path", "module", "lines", "tests", "items", "functional",
+        "suppressions", "error_handling", "imports", "reexports"
+      ],
+      "properties": {
+        "path": { "description": "Unique across the report; the key that `file` fields in `imports` and `reexports` refer to.", "type": "string" },
+        "module": { "description": "Module path of the file within its target, rooted at `crate`.", "type": "string" },
+        "lines": { "$ref": "#/$defs/lines" },
+        "tests": { "$ref": "#/$defs/tests" },
+        "items": { "$ref": "#/$defs/items" },
+        "functional": { "$ref": "#/$defs/functional" },
+        "suppressions": { "$ref": "#/$defs/suppressions" },
+        "error_handling": { "$ref": "#/$defs/error_handling" },
+        "imports": { "type": "array", "items": { "$ref": "#/$defs/import" } },
+        "reexports": { "type": "array", "items": { "$ref": "#/$defs/reexport" } }
+      }
+    },
+    "lines": {
+      "description": "Disjoint line counts; their sum is the total line count.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "test", "comment", "blank"],
+      "properties": {
+        "code": { "description": "Code lines outside test code.", "$ref": "#/$defs/count" },
+        "test": { "description": "Code lines inside test code.", "$ref": "#/$defs/count" },
+        "comment": { "description": "Comment-only lines, doc comments included.", "$ref": "#/$defs/count" },
+        "blank": { "$ref": "#/$defs/count" }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "ignored"],
+      "properties": {
+        "count": { "description": "`#[test]` fns, ignored ones included.", "$ref": "#/$defs/count" },
+        "ignored": { "description": "`#[test]` fns marked `#[ignore]`.", "$ref": "#/$defs/count" }
+      }
+    },
+    "items": {
+      "description": "Item definitions by kind.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "struct", "enum", "union", "trait", "impl", "fn", "method",
+        "const", "static", "type", "mod", "macro"
+      ],
+      "properties": {
+        "struct": { "$ref": "#/$defs/count" },
+        "enum": { "$ref": "#/$defs/count" },
+        "union": { "$ref": "#/$defs/count" },
+        "trait": { "$ref": "#/$defs/count" },
+        "impl": { "description": "`impl` blocks.", "$ref": "#/$defs/count" },
+        "fn": { "description": "Free fns.", "$ref": "#/$defs/count" },
+        "method": { "description": "Fns inside `impl` and `trait` blocks.", "$ref": "#/$defs/count" },
+        "const": { "$ref": "#/$defs/count" },
+        "static": { "$ref": "#/$defs/count" },
+        "type": { "description": "Type aliases.", "$ref": "#/$defs/count" },
+        "mod": { "description": "Inline and declared modules.", "$ref": "#/$defs/count" },
+        "macro": { "description": "`macro_rules!` definitions.", "$ref": "#/$defs/count" }
+      }
+    },
+    "functional": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["closures", "combinators", "higher_order_fns"],
+      "properties": {
+        "closures": { "description": "Closure expressions.", "$ref": "#/$defs/count" },
+        "combinators": { "description": "Iterator/Option/Result adapter calls (`map`, `filter`, `fold`, `and_then`, ...), matched by method name.", "$ref": "#/$defs/count" },
+        "higher_order_fns": { "description": "Fn definitions that take or return a function (`Fn*` bound, `impl`/`dyn Fn*`, or fn pointer).", "$ref": "#/$defs/count" }
+      }
+    },
+    "suppressions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["todo", "unimplemented", "unreachable", "allow"],
+      "properties": {
+        "todo": { "description": "`todo!` invocations.", "$ref": "#/$defs/count" },
+        "unimplemented": { "description": "`unimplemented!` invocations.", "$ref": "#/$defs/count" },
+        "unreachable": { "description": "`unreachable!` invocations.", "$ref": "#/$defs/count" },
+        "allow": { "description": "`#[allow(..)]` and `#[expect(..)]` attributes, inner and outer.", "$ref": "#/$defs/count" }
+      }
+    },
+    "error_handling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unwrap", "expect", "panic", "propagate"],
+      "properties": {
+        "unwrap": { "description": "`.unwrap()` calls.", "$ref": "#/$defs/count" },
+        "expect": { "description": "`.expect(..)` calls.", "$ref": "#/$defs/count" },
+        "panic": { "description": "`panic!` invocations.", "$ref": "#/$defs/count" },
+        "propagate": { "description": "`?` operators.", "$ref": "#/$defs/count" }
+      }
+    },
+    "import": {
+      "description": "An intra-crate dependency of the file: `use` declarations (`pub use` included) and qualified paths starting with `crate`, `self`, or `super`. One entry per target module; same-file targets are omitted.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "file", "names"],
+      "properties": {
+        "module": { "description": "Absolute path of the deepest module the import path resolves to. Re-exports are not followed; see `reexports`.", "type": "string" },
+        "file": { "description": "`path` of the file defining that module.", "type": "string" },
+        "names": {
+          "description": "Imported names, sorted and deduplicated. `*` for a glob; empty if only the module itself is imported.",
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "reexport": {
+      "description": "One name re-exported by a `pub use` in the file (restricted visibilities such as `pub(crate)` included), traced back to its definition. A glob has name `*` and a single hop to the globbed module.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "trace", "end"],
+      "properties": {
+        "name": { "description": "Name as exported, after any `as` rename.", "type": "string" },
+        "trace": {
+          "description": "Hops from this re-export toward the definition, nearest first. Each intermediate hop is itself a re-export.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/hop" }
+        },
+        "end": {
+          "description": "How the trace ends. `definition`: the last hop's module defines the item. `external`: the last hop is outside the crate. `unresolved`: the name was not found in the last hop's module (e.g. macro-generated).",
+          "enum": ["definition", "external", "unresolved"]
+        }
+      }
+    },
+    "hop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "file", "name"],
+      "properties": {
+        "module": { "description": "Absolute path of the module the name is taken from.", "type": "string" },
+        "file": { "description": "`path` of the file defining that module; null if outside the crate.", "type": ["string", "null"] },
+        "name": { "description": "Name of the item within that module.", "type": "string" }
+      }
+    }
+  }
+}
