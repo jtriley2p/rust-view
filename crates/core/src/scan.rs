@@ -588,6 +588,7 @@ fn c() {}
             Lines {
                 code: 3,
                 test: 12,
+                doc: 0,
                 comment: 0,
                 blank: 0
             }
@@ -609,6 +610,7 @@ fn c() {}
             Lines {
                 code: 0,
                 test: 4,
+                doc: 0,
                 comment: 0,
                 blank: 0
             }
@@ -753,6 +755,7 @@ fn c() {}
             Lines {
                 code: 1,
                 test: 0,
+                doc: 0,
                 comment: 1,
                 blank: 0
             }

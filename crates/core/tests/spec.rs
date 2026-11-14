@@ -184,7 +184,7 @@ fn analyzes_a_crate() {
         json!({
             "path": "crates/core/src/lib.rs",
             "module": "crate",
-            "lines": { "code": 7, "test": 0, "comment": 1, "blank": 2 },
+            "lines": { "code": 7, "test": 0, "doc": 1, "comment": 0, "blank": 2 },
             "tests": { "count": 0, "ignored": 0 },
             "items": {
                 "struct": 0, "enum": 0, "union": 0, "trait": 0, "impl": 0, "fn": 0, "method": 0,
@@ -243,7 +243,8 @@ fn analyzes_a_crate() {
         Lines {
             code: 18,
             test: 13,
-            comment: 1,
+            doc: 1,
+            comment: 0,
             blank: 7
         }
     );
@@ -314,6 +315,7 @@ fn analyzes_a_crate() {
             lines: Lines {
                 code: 0,
                 test: 6,
+                doc: 0,
                 comment: 0,
                 blank: 1
             },

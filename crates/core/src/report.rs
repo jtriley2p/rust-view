@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::ops::AddAssign;
 
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Report {
@@ -108,7 +108,7 @@ macro_rules! summable {
 }
 
 summable! {
-    Lines: u32 { code, test, comment, blank }
+    Lines: u32 { code, test, doc, comment, blank }
     Tests: u32 { count, ignored }
     Items: u32 {
         r#struct, r#enum, union, r#trait, r#impl, r#fn, method,

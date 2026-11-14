@@ -1,59 +1,82 @@
-//! Line classification: code, test, comment, blank.
+//! Line classification: code, test, doc, comment, blank.
 
 use crate::report::Lines;
-use proc_macro2::{Span, TokenStream, TokenTree};
+use proc_macro2::{Delimiter, Span, TokenStream, TokenTree};
+
+/// What touches a line; the greater kind wins.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Kind {
+    None,
+    Doc,
+    Code,
+}
 
 /// Counts the lines of `text`, whose tokens are `tokens`. A line is code if a
-/// token touches it. `tests` are 1-based inclusive line ranges of test code.
+/// token touches it, doc if only doc comments or `#[doc = ..]` attributes do.
+/// `tests` are 1-based inclusive line ranges of test code.
 pub fn count(text: &str, tokens: TokenStream, tests: &[(usize, usize)]) -> Lines {
-    let mut code = vec![false; text.lines().count() + 1];
-    mark(tokens, &mut code);
+    let mut kinds = vec![Kind::None; text.lines().count() + 1];
+    mark(tokens, &mut kinds);
     let mut out = Lines::default();
     for (i, line) in text.lines().enumerate() {
         let n = i + 1;
-        let slot = if !code[n] {
-            if line.trim().is_empty() {
-                &mut out.blank
-            } else {
-                &mut out.comment
-            }
-        } else if tests.iter().any(|&(a, b)| a <= n && n <= b) {
-            &mut out.test
-        } else {
-            &mut out.code
+        let slot = match kinds[n] {
+            Kind::Code if tests.iter().any(|&(a, b)| a <= n && n <= b) => &mut out.test,
+            Kind::Code => &mut out.code,
+            _ if line.trim().is_empty() => &mut out.blank,
+            Kind::Doc => &mut out.doc,
+            Kind::None => &mut out.comment,
         };
         *slot += 1;
     }
     out
 }
 
-fn mark(tokens: TokenStream, code: &mut [bool]) {
+fn mark(tokens: TokenStream, kinds: &mut [Kind]) {
     let mut iter = tokens.into_iter().peekable();
     while let Some(tt) = iter.next() {
         match tt {
-            // A doc comment lexes as `#[doc = ".."]` or `#![doc = ".."]`, all spanning the comment.
-            TokenTree::Punct(p) if p.as_char() == '#' && is_comment(p.span()) => {
-                iter.next_if(|t| matches!(t, TokenTree::Punct(_)));
-                iter.next();
+            // `#[doc = ..]` or `#![doc = ..]`. A doc comment lexes as the same, all spanning the comment.
+            TokenTree::Punct(p) if p.as_char() == '#' => {
+                let bang = iter.next_if(|t| matches!(t, TokenTree::Punct(p) if p.as_char() == '!'));
+                let attr = iter.next_if(is_doc);
+                let kind = if attr.is_some() {
+                    Kind::Doc
+                } else {
+                    Kind::Code
+                };
+                for t in [Some(TokenTree::Punct(p)), bang, attr]
+                    .into_iter()
+                    .flatten()
+                {
+                    touch(t.span(), kind, kinds);
+                }
             }
             TokenTree::Group(g) => {
-                touch(g.span_open(), code);
-                touch(g.span_close(), code);
-                mark(g.stream(), code);
+                touch(g.span_open(), Kind::Code, kinds);
+                touch(g.span_close(), Kind::Code, kinds);
+                mark(g.stream(), kinds);
             }
-            other => touch(other.span(), code),
+            other => touch(other.span(), Kind::Code, kinds),
         }
     }
 }
 
-fn is_comment(span: Span) -> bool {
-    span.source_text().is_some_and(|s| s.starts_with('/'))
+/// A `[doc = ..]` group.
+fn is_doc(tt: &TokenTree) -> bool {
+    let TokenTree::Group(g) = tt else {
+        return false;
+    };
+    let mut inner = g.stream().into_iter();
+    g.delimiter() == Delimiter::Bracket
+        && matches!(inner.next(), Some(TokenTree::Ident(i)) if i == "doc")
+        && matches!(inner.next(), Some(TokenTree::Punct(p)) if p.as_char() == '=')
 }
 
-fn touch(span: Span, code: &mut [bool]) {
+fn touch(span: Span, kind: Kind, kinds: &mut [Kind]) {
     for line in span.start().line..=span.end().line {
-        if let Some(c) = code.get_mut(line) {
-            *c = true;
+        if let Some(k) = kinds.get_mut(line) {
+            *k = (*k).max(kind);
         }
     }
 }
@@ -92,12 +115,13 @@ fn f() {
             Lines {
                 code: 5,
                 test: 2,
-                comment: 7,
+                doc: 4,
+                comment: 3,
                 blank: 2
             }
         );
         assert_eq!(
-            l.code + l.test + l.comment + l.blank,
+            l.code + l.test + l.doc + l.comment + l.blank,
             text.lines().count() as u32
         );
     }
@@ -113,8 +137,40 @@ fn f() {
             Lines {
                 code: 1,
                 test: 0,
-                comment: 1,
+                doc: 1,
+                comment: 0,
                 blank: 0
+            }
+        );
+    }
+
+    #[test]
+    fn doc_attrs() {
+        let text = "\
+#![doc = include_str!(\"../README.md\")]
+#[doc = \"multi
+
+line\"]
+#[doc(hidden)]
+#[doc = \"inline\"] struct A;
+/** block
+
+    doc */
+mod m {
+    //! inner
+    #[test]
+    /// in test
+    fn t() {}
+}
+";
+        assert_eq!(
+            lines(text, &[(12, 14)]),
+            Lines {
+                code: 4,
+                test: 2,
+                doc: 7,
+                comment: 0,
+                blank: 2
             }
         );
     }

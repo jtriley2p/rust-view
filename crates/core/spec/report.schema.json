@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["version", "totals", "crates"],
   "properties": {
-    "version": { "description": "Schema version. Bumped on any breaking change.", "const": 1 },
+    "version": { "description": "Schema version. Bumped on any breaking change.", "const": 2 },
     "totals": { "description": "Sum over all crates.", "$ref": "#/$defs/totals" },
     "crates": { "type": "array", "items": { "$ref": "#/$defs/crate" } }
   },
@@ -75,11 +75,12 @@
       "description": "Disjoint line counts; their sum is the total line count.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["code", "test", "comment", "blank"],
+      "required": ["code", "test", "doc", "comment", "blank"],
       "properties": {
         "code": { "description": "Code lines outside test code.", "$ref": "#/$defs/count" },
         "test": { "description": "Code lines inside test code.", "$ref": "#/$defs/count" },
-        "comment": { "description": "Comment-only lines, doc comments included.", "$ref": "#/$defs/count" },
+        "doc": { "description": "Lines holding only doc comments or `#[doc = ..]` attributes, in test code or not.", "$ref": "#/$defs/count" },
+        "comment": { "description": "Other comment-only lines.", "$ref": "#/$defs/count" },
         "blank": { "$ref": "#/$defs/count" }
       }
     },

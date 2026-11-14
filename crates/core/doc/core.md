@@ -31,8 +31,9 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
 - **Test fn**: any attribute whose last path segment is `test` (covers `#[tokio::test]`).
 - **`cfg`**: `cfg(all(test, ..))` is test code, `cfg(not(test))` is not. Other `cfg` gates are
   ignored; all code is counted.
-- **Lines**: code if a token touches the line, comment if non-blank without tokens, else blank.
-  Doc comments are comments.
+- **Lines**: code if a token touches the line, else blank if empty, else doc if a doc comment
+  touches it, else comment. `#[doc = ..]` attributes are doc comments; `#[doc(..)]` is code.
+  Doc lines inside test code stay doc.
 - **Imports**: one edge per target module, keyed by file. `use` declarations plus qualified
   `crate`/`self`/`super` paths. Same-file targets are omitted. Re-exports are not followed.
 - **Unprefixed `use` paths** resolve when the current module defines the first segment.
@@ -66,8 +67,6 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
 
 ## Remaining
 
-- **CLI**: `cargo metadata` for crates, roots, and dependencies; read files; call `analyze`;
-  write JSON; print errors.
 - **Spec**: add a `module` field to re-exports to keep inline-module scope.
 - **Resolution**: resolve a binary's imports of its own library; record `extern` block items as
   definitions.
@@ -75,7 +74,3 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
   (nightly, needs a successful build, one cfg set) and pass the text into core as data, scanned
   for definitions only. A `macro_rules!` interpreter in core would stay pure but miss dependency
   macros and proc macros.
-- **Coverage**, if revisited: shell out to `cargo llvm-cov --lcov`, parse with the `lcov` crate,
-  pass into core as data.
-- **Dead items**, if revisited: rustc's `dead_code` lint via `cargo check`, or a name-based
-  heuristic that under-reports.

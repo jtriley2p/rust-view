@@ -1,8 +1,8 @@
 {
-  "version": 1,
+  "version": 2,
   "totals": {
     "files": 7,
-    "lines": { "code": 342, "test": 138, "comment": 50, "blank": 82 },
+    "lines": { "code": 342, "test": 138, "doc": 31, "comment": 19, "blank": 82 },
     "tests": { "count": 16, "ignored": 1 },
     "items": {
       "struct": 5, "enum": 2, "union": 0, "trait": 1, "impl": 8, "fn": 6, "method": 21,
@@ -18,7 +18,7 @@
       "path": "crates/core",
       "totals": {
         "files": 5,
-        "lines": { "code": 263, "test": 126, "comment": 41, "blank": 67 },
+        "lines": { "code": 263, "test": 126, "doc": 26, "comment": 15, "blank": 67 },
         "tests": { "count": 14, "ignored": 1 },
         "items": {
           "struct": 4, "enum": 1, "union": 0, "trait": 1, "impl": 7, "fn": 3, "method": 20,
@@ -37,7 +37,7 @@
         {
           "path": "crates/core/src/lib.rs",
           "module": "crate",
-          "lines": { "code": 10, "test": 0, "comment": 4, "blank": 3 },
+          "lines": { "code": 10, "test": 0, "doc": 3, "comment": 1, "blank": 3 },
           "tests": { "count": 0, "ignored": 0 },
           "items": {
             "struct": 0, "enum": 0, "union": 0, "trait": 0, "impl": 0, "fn": 0, "method": 0,
@@ -79,7 +79,7 @@
         {
           "path": "crates/core/src/error.rs",
           "module": "crate::error",
-          "lines": { "code": 24, "test": 0, "comment": 5, "blank": 4 },
+          "lines": { "code": 24, "test": 0, "doc": 4, "comment": 1, "blank": 4 },
           "tests": { "count": 0, "ignored": 0 },
           "items": {
             "struct": 0, "enum": 1, "union": 0, "trait": 0, "impl": 2, "fn": 0, "method": 2,
@@ -94,7 +94,7 @@
         {
           "path": "crates/core/src/store.rs",
           "module": "crate::store",
-          "lines": { "code": 142, "test": 58, "comment": 21, "blank": 33 },
+          "lines": { "code": 142, "test": 58, "doc": 14, "comment": 7, "blank": 33 },
           "tests": { "count": 7, "ignored": 1 },
           "items": {
             "struct": 2, "enum": 0, "union": 0, "trait": 1, "impl": 3, "fn": 2, "method": 11,
@@ -118,7 +118,7 @@
         {
           "path": "crates/core/src/wal.rs",
           "module": "crate::wal",
-          "lines": { "code": 87, "test": 22, "comment": 9, "blank": 18 },
+          "lines": { "code": 87, "test": 22, "doc": 5, "comment": 4, "blank": 18 },
           "tests": { "count": 3, "ignored": 0 },
           "items": {
             "struct": 2, "enum": 0, "union": 0, "trait": 0, "impl": 2, "fn": 1, "method": 7,
@@ -135,7 +135,7 @@
         {
           "path": "crates/core/tests/roundtrip.rs",
           "module": "crate",
-          "lines": { "code": 0, "test": 46, "comment": 2, "blank": 9 },
+          "lines": { "code": 0, "test": 46, "doc": 0, "comment": 2, "blank": 9 },
           "tests": { "count": 4, "ignored": 0 },
           "items": {
             "struct": 0, "enum": 0, "union": 0, "trait": 0, "impl": 0, "fn": 0, "method": 0,
@@ -154,7 +154,7 @@
       "path": "crates/cli",
       "totals": {
         "files": 2,
-        "lines": { "code": 79, "test": 12, "comment": 9, "blank": 15 },
+        "lines": { "code": 79, "test": 12, "doc": 5, "comment": 4, "blank": 15 },
         "tests": { "count": 2, "ignored": 0 },
         "items": {
           "struct": 1, "enum": 1, "union": 0, "trait": 0, "impl": 1, "fn": 3, "method": 1,
@@ -173,7 +173,7 @@
         {
           "path": "crates/cli/src/main.rs",
           "module": "crate",
-          "lines": { "code": 48, "test": 0, "comment": 3, "blank": 8 },
+          "lines": { "code": 48, "test": 0, "doc": 2, "comment": 1, "blank": 8 },
           "tests": { "count": 0, "ignored": 0 },
           "items": {
             "struct": 0, "enum": 0, "union": 0, "trait": 0, "impl": 0, "fn": 3, "method": 0,
@@ -190,7 +190,7 @@
         {
           "path": "crates/cli/src/args.rs",
           "module": "crate::args",
-          "lines": { "code": 31, "test": 12, "comment": 6, "blank": 7 },
+          "lines": { "code": 31, "test": 12, "doc": 3, "comment": 3, "blank": 7 },
           "tests": { "count": 2, "ignored": 0 },
           "items": {
             "struct": 1, "enum": 1, "union": 0, "trait": 0, "impl": 1, "fn": 0, "method": 1,
