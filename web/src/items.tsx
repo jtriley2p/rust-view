@@ -1,25 +1,27 @@
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type KeyboardEvent, type MouseEvent, useMemo, useState } from 'react'
 import { Canvas } from './canvas'
-import { Button, Tag } from './flint'
+import { Button } from './flint'
 import { type Crate, type Definition, type File, KINDS, type Kind } from './report'
 
-/** Node height and least width, row pitch, and indent per tree level. */
+/** A module's header height and least width, an item line's height, and the space under a module's last item. */
 const HEIGHT = 40
 const WIDTH = 128
-const PITCH = 48
+const LINE = 28
+const FOOT = 8
+/** Space between modules, and indent per tree level. */
+const GAP = 8
 const INDENT = 32
-/** Clear space inside the drawing's edges, and between the widest node and the first arrow lane. */
+/** Clear space inside the drawing's edges, and between the widest module and the first arrow lane. */
 const MARGIN = 24
-/** Distance between the lanes arrows run down, one per module they leave. */
+/** Distance between the lanes arrows run down, one per place they leave. */
 const LANE = 16
-/** Where arrows enter and leave a node, below its top edge. */
+/** Where arrows enter and leave a module, below its top edge. */
 const IN = 12
 const OUT = 28
-/** The mono advance and side padding a node's width is estimated from. */
+/** The mono advance and side padding widths are estimated from, and the characters an item's kind column takes. */
 const ADVANCE = 7.8
 const PAD = 16
-/** Modules start expanded in the list up to this many items in total. */
-const MAX_OPEN_ITEMS = 50
+const KIND = 8
 
 type Item = Definition & { id: string; file: string; root: string }
 type Mod = {
@@ -34,7 +36,8 @@ type Mod = {
   children: Mod[]
   items: Item[]
 }
-type Row = { mod: Mod; x: number; y: number; width: number; parent: Row | null }
+/** A module as drawn. `items` are those on show: none while it is closed; `count` is how many it would show open. */
+type Row = { mod: Mod; x: number; y: number; width: number; height: number; parent: Row | null; items: Item[]; count: number }
 /** The focused item passing from one module to another that imports it; `via` a re-export if not from its definition. */
 type Flow = { from: string; to: string; via: boolean }
 
@@ -117,40 +120,62 @@ function Switch({ label, checked, onChange }: { label: string; checked: boolean;
   )
 }
 
+/** What makes an SVG group a button: a press, or Enter or Space, runs `act`. */
+const press = (act: () => void) => ({
+  role: 'button',
+  tabIndex: 0,
+  onClick: (e: MouseEvent) => {
+    e.stopPropagation()
+    act()
+  },
+  onKeyDown: (e: KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return
+    e.preventDefault()
+    act()
+  },
+})
+
 export function Items({ crates }: { crates: Crate[] }) {
-  /** The focused item's id, or the focused module's. */
+  /** The focused item's id. */
   const [picked, setPicked] = useState<string | null>(null)
+  /** The modules opened to show their items. */
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set())
   const [reexports, setReexports] = useState(true)
-  const [internal, setInternal] = useState(true)
+  const [internal, setInternal] = useState(false)
   const [hidden, setHidden] = useState<ReadonlySet<Kind>>(new Set())
-  const [toggled, setToggled] = useState<ReadonlySet<string>>(new Set())
-  /** The focus as drawn in the tree, and as listed when it is a module. */
-  const node = useRef<SVGGElement>(null)
-  const line = useRef<HTMLButtonElement>(null)
 
   const roots = useMemo(() => build(crates), [crates])
   const rows = useMemo(() => {
     const out: Row[] = []
+    let y = MARGIN
     const walk = (mod: Mod, depth: number, parent: Row | null) => {
-      const text = mod.note ? `${mod.label} ${mod.note}` : mod.label
+      const listed = mod.items.filter(i => (internal || i.public) && !hidden.has(i.kind))
+      const items = open.has(mod.id) ? listed : []
+      // The header holds a mark, the label, and the count; a line holds the kind, the name, and ` internal`.
+      const chars = Math.max(
+        mod.label.length + (mod.note ? mod.note.length + 1 : 0) + 4 + String(listed.length).length,
+        ...items.map(i => KIND + i.name.length + (i.public ? 0 : 9)),
+      )
       const row = {
         mod,
         parent,
+        items,
+        count: listed.length,
         x: MARGIN + depth * INDENT,
-        y: MARGIN + out.length * PITCH,
-        width: Math.max(WIDTH, 8 * Math.ceil((text.length * ADVANCE + 2 * PAD) / 8)),
+        y,
+        width: Math.max(WIDTH, 8 * Math.ceil((chars * ADVANCE + 2 * PAD) / 8)),
+        height: HEIGHT + (items.length ? items.length * LINE + FOOT : 0),
       }
+      y += row.height + GAP
       out.push(row)
       mod.children.forEach(c => walk(c, depth + 1, row))
     }
     roots.forEach(r => walk(r, 0, null))
     return out
-  }, [roots])
-  const all = useMemo(() => rows.flatMap(r => r.mod.items), [rows])
-  const item = all.find(i => i.id === picked)
-  const spot = item ? undefined : rows.find(r => r.mod.id === picked)?.mod
-  /** The module in focus: the focused item's, or the one picked in the tree. */
-  const home = item ? key(item.root, item.module) : spot?.id ?? ''
+  }, [roots, open, internal, hidden])
+  /** Only an item on show holds the focus. */
+  const item = useMemo(() => rows.flatMap(r => r.items).find(i => i.id === picked), [rows, picked])
+  const home = item ? key(item.root, item.module) : ''
 
   /** Every hop of the focused item, each pair of modules once. */
   const { flows: traced, exporters } = useMemo(() => {
@@ -167,24 +192,6 @@ export function Items({ crates }: { crates: Crate[] }) {
     return [...ends].map(to => ({ from: home, to, via: false }))
   }, [traced, reexports, home])
 
-  useEffect(() => {
-    node.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-    line.current?.scrollIntoView({ block: 'start' })
-  }, [picked])
-
-  const shows = (i: Item) => (internal || i.public) && !hidden.has(i.kind)
-  /** Listed items in each module and the modules under it. */
-  const sizes = useMemo(() => {
-    const out = new Map<string, number>()
-    const walk = (m: Mod): number => {
-      const n = m.items.filter(shows).length + m.children.reduce((sum, c) => sum + walk(c), 0)
-      out.set(m.id, n)
-      return n
-    }
-    roots.forEach(walk)
-    return out
-  }, [roots, internal, hidden])
-
   if (rows.length === 0) {
     return <p className="body muted">The loaded reports define no items outside test code.</p>
   }
@@ -192,14 +199,17 @@ export function Items({ crates }: { crates: Crate[] }) {
   const at = new Map(rows.map(r => [r.mod.id, r]))
   const bus = Math.max(...rows.map(r => r.x + r.width)) + MARGIN
   const sources = [...new Set(flows.map(f => f.from))]
-  /** One path per source module: out to its lane, along it, and back into each importer with a chevron. */
+  /** One path per source: out to its lane, along it, and back into each importer with a chevron. */
   const wires = sources.flatMap((id, lane) => {
     const from = at.get(id)
     const ends = flows.filter(f => f.from === id).map(f => at.get(f.to)).filter((r): r is Row => r !== undefined)
     if (!from || !ends.length) return []
+    // The definition's arrows leave from the item's own line; a re-export's leave from its module's header.
+    const line = id === home && item ? from.items.indexOf(item) : -1
+    const out = from.y + (line < 0 ? OUT : HEIGHT + line * LINE + LINE / 2)
     const x = bus + lane * LANE
-    const ys = [from.y + OUT, ...ends.map(e => e.y + IN)]
-    let d = `M${from.x + from.width} ${from.y + OUT}H${x}M${x} ${Math.min(...ys)}V${Math.max(...ys)}`
+    const ys = [out, ...ends.map(e => e.y + IN)]
+    let d = `M${from.x + from.width} ${out}H${x}M${x} ${Math.min(...ys)}V${Math.max(...ys)}`
     for (const e of ends) {
       const [tip, y] = [e.x + e.width + 4, e.y + IN]
       d += `M${x} ${y}H${tip}M${tip + 6} ${y - 4}L${tip} ${y}L${tip + 6} ${y + 4}`
@@ -207,156 +217,93 @@ export function Items({ crates }: { crates: Crate[] }) {
     return [{ id, d, weak: id !== home }]
   })
   const branches = rows
-    .map(r => (r.parent ? `M${r.parent.x + INDENT / 2} ${r.parent.y + HEIGHT}V${r.y + HEIGHT / 2}H${r.x}` : ''))
+    .map(r => (r.parent ? `M${r.parent.x + INDENT / 2} ${r.parent.y + r.parent.height}V${r.y + HEIGHT / 2}H${r.x}` : ''))
     .join('')
   const width = bus + Math.max(0, sources.length - 1) * LANE + MARGIN
-  const height = 2 * MARGIN + rows.length * PITCH - (PITCH - HEIGHT)
+  const height = Math.max(...rows.map(r => r.y + r.height)) + MARGIN
   const reached = new Set(flows.flatMap(f => [f.from, f.to]))
-  const state = (id: string) => (!home ? '' : id === home ? 'focus' : reached.has(id) ? 'down' : 'off')
+  const state = (id: string) => (!item ? '' : id === home ? 'focus' : reached.has(id) ? 'down' : 'off')
 
   const importers = new Set(traced.map(f => f.to)).size
   const summary = item
     ? `${item.name} is defined in ${item.module}, imported by ${count(importers, 'module')}`
       + (exporters ? ` and re-exported by ${exporters}.` : '.')
-    : spot
-    ? `${spot.module} defines ${spot.items.length ? count(spot.items.length, 'item') : 'no items'}.`
-    : 'Select an item below to see its module and the modules that import it.'
+    : 'Open a module to see its items, then select one to see the modules that import it.'
 
   const flip = <T,>(set: ReadonlySet<T>, v: T) => {
     const next = new Set(set)
     if (!next.delete(v)) next.add(v)
     return next
   }
-  const startOpen = all.length <= MAX_OPEN_ITEMS
-  /** Focuses a module picked in the tree, opening the list down to it. */
-  const visit = (row: Row) => {
-    if (row.mod.id === picked) return setPicked(null)
-    const next = new Set(toggled)
-    // A module is closed when it is toggled from an open start, or untouched from a closed one.
-    for (let r: Row | null = row; r; r = r.parent) {
-      if (next.has(r.mod.id) === (!r.parent || startOpen) && !next.delete(r.mod.id)) next.add(r.mod.id)
-    }
-    setToggled(next)
-    setPicked(row.mod.id)
-  }
-  const indent = (depth: number) => ({ '--depth': depth }) as CSSProperties
-  const branch = (mod: Mod, depth: number): ReactNode => {
-    const size = sizes.get(mod.id) ?? 0
-    if (!size) return null
-    const open = toggled.has(mod.id) !== (depth === 0 || startOpen)
-    return (
-      <li key={mod.id}>
-        <button
-          ref={mod.id === picked ? line : undefined}
-          className="line code"
-          style={indent(depth)}
-          aria-expanded={open}
-          aria-current={mod.id === picked || undefined}
-          onClick={() => setToggled(flip(toggled, mod.id))}
-        >
-          <span className="mark">{open ? '−' : '+'}</span>
-          {mod.label}
-          <span className="faint">{[mod.note, count(size, 'item')].filter(Boolean).join(' · ')}</span>
-        </button>
-        {open && (
-          <ul>
-            {mod.children.map(c => branch(c, depth + 1))}
-            {mod.items.filter(shows).map(i => (
-              <li key={i.id}>
-                <button
-                  className="line code"
-                  style={indent(depth + 1)}
-                  aria-pressed={i.id === picked}
-                  onClick={() => setPicked(i.id === picked ? null : i.id)}
-                >
-                  <Tag>{i.kind}</Tag>
-                  {i.name}
-                  {!i.public && <span className="faint">internal</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </li>
-    )
-  }
-  const listed = all.filter(i => internal || i.public)
+  const listed = rows.flatMap(r => r.mod.items).filter(i => internal || i.public)
 
   return (
-    <div className="halves">
-      <section className="half" aria-label="Module tree">
-        <header className="half-head">
-          <p className="small muted" aria-live="polite">{summary}</p>
-          {home && <Button size="sm" variant="ghost" onClick={() => setPicked(null)}>Clear focus</Button>}
-          <Switch label="Re-exports" checked={reexports} onChange={setReexports} />
-        </header>
-        <div className="stage">
-          <Canvas
-            width={width}
-            height={height}
-            className="tree"
-            label={'Module tree. Bright arrows run from the module that defines the focused item to the modules that '
-              + 'import it; dimmer arrows run from the modules that re-export it.'}
-            start={1}
-            onClear={() => setPicked(null)}
-          >
-            <path d={branches} className="fl-g-line" />
-            {/* the definition's own arrows go last, so they draw over the weaker */}
-            {[...wires].reverse().map(w => <path key={w.id} d={w.d} className={w.weak ? 'fl-g-edge' : 'fl-g-subject'} />)}
-            {rows.map(row => {
-              const { mod, x, y, width } = row
-              return (
+    <div className="frame">
+      <header className="bar">
+        <div className="kinds" role="group" aria-label="Kinds shown">
+          {KINDS.map(k => [k, listed.filter(i => i.kind === k).length] as const).filter(([, n]) => n > 0).map(([k, n]) => (
+            <label key={k} className="code">
+              <input type="checkbox" checked={!hidden.has(k)} onChange={() => setHidden(flip(hidden, k))} />
+              {k}
+              <span>{n}</span>
+            </label>
+          ))}
+        </div>
+        <Switch label="Internal items" checked={internal} onChange={setInternal} />
+        <Switch label="Re-exports" checked={reexports} onChange={setReexports} />
+      </header>
+      <div className="bar">
+        <p className="small muted" aria-live="polite">{summary}</p>
+        {item && <Button size="sm" variant="ghost" onClick={() => setPicked(null)}>Clear focus</Button>}
+      </div>
+      <div className="stage">
+        <Canvas
+          width={width}
+          height={height}
+          className="tree"
+          label={'Module tree. A module opens to list its items. Bright arrows run from the focused item to the '
+            + 'modules that import it; dimmer arrows run from the modules that re-export it.'}
+          start={1}
+          onClear={() => setPicked(null)}
+        >
+          <path d={branches} className="fl-g-line" />
+          {/* the definition's own arrows go last, so they draw over the weaker */}
+          {[...wires].reverse().map(w => <path key={w.id} d={w.d} className={w.weak ? 'fl-g-edge' : 'fl-g-subject'} />)}
+          {rows.map(({ mod, x, y, width, height, items, count }) => (
+            <g key={mod.id} className={`node ${state(mod.id)}`} transform={`translate(${x} ${y})`}>
+              <rect width={width} height={height} />
+              <g
+                className="head"
+                {...(count > 0 && { ...press(() => setOpen(flip(open, mod.id))), 'aria-expanded': open.has(mod.id) })}
+              >
+                <rect className="hit" width={width} height={HEIGHT} />
+                {count > 0 && <text className="fl-g-value faint" x={PAD} y={HEIGHT / 2}>{open.has(mod.id) ? '−' : '+'}</text>}
+                <text className="fl-g-value" x={PAD + 2 * ADVANCE} y={HEIGHT / 2}>
+                  {mod.label}
+                  {mod.note && <tspan> {mod.note}</tspan>}
+                </text>
+                {count > 0 && <text className="fl-g-value faint end" x={width - PAD} y={HEIGHT / 2}>{count}</text>}
+              </g>
+              {items.map((i, n) => (
                 <g
-                  key={mod.id}
-                  ref={mod.id === home ? node : undefined}
-                  className={`node ${state(mod.id)}`}
-                  transform={`translate(${x} ${y})`}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={mod.id === picked}
-                  onClick={e => {
-                    e.stopPropagation()
-                    visit(row)
-                  }}
-                  onKeyDown={e => {
-                    if (e.key !== 'Enter' && e.key !== ' ') return
-                    e.preventDefault()
-                    visit(row)
-                  }}
+                  key={i.id}
+                  className="item"
+                  transform={`translate(0 ${HEIGHT + n * LINE})`}
+                  aria-pressed={i === item}
+                  {...press(() => setPicked(i === item ? null : i.id))}
                 >
-                  <rect width={width} height={HEIGHT} />
-                  <text className="fl-g-value" x={width / 2} y={HEIGHT / 2}>
-                    {mod.label}
-                    {mod.note && <tspan> {mod.note}</tspan>}
+                  <rect className="hit" x={2} width={width - 4} height={LINE} />
+                  <text className="fl-g-value faint" x={PAD} y={LINE / 2}>{i.kind}</text>
+                  <text className="fl-g-value" x={PAD + KIND * ADVANCE} y={LINE / 2}>
+                    {i.name}
+                    {!i.public && <tspan> internal</tspan>}
                   </text>
                 </g>
-              )
-            })}
-          </Canvas>
-        </div>
-      </section>
-
-      <section className="half" aria-label="Items">
-        <header className="half-head">
-          <div className="kinds" role="group" aria-label="Kinds shown">
-            {KINDS.map(k => [k, listed.filter(i => i.kind === k).length] as const).filter(([, n]) => n > 0).map(([k, n]) => (
-              <label key={k} className="code">
-                <input type="checkbox" checked={!hidden.has(k)} onChange={() => setHidden(flip(hidden, k))} />
-                {k}
-                <span>{n}</span>
-              </label>
-            ))}
-          </div>
-          <Switch label="Internal items" checked={internal} onChange={setInternal} />
-        </header>
-        <div className="half-body">
-          {roots.some(r => sizes.get(r.id)) ? (
-            <ul className="outline">{roots.map(r => branch(r, 0))}</ul>
-          ) : (
-            <p className="small muted">No item matches. Turn a kind back on, or show internal items.</p>
-          )}
-        </div>
-      </section>
+              ))}
+            </g>
+          ))}
+        </Canvas>
+      </div>
     </div>
   )
 }

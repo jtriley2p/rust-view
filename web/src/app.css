@@ -123,14 +123,14 @@
 .canvas { display: flex; height: 100%; overflow: auto; }
 /* zoomed past fit, the canvas pans by dragging */
 .canvas.pan { cursor: grab; }
-.canvas.pan:active, .canvas.pan:active .node { cursor: grabbing; }
+.canvas.pan:active, .canvas.pan:active [role='button'] { cursor: grabbing; }
 
 /* sized by the zoom and scrolled once larger than the canvas; the dependency graph is centred while smaller */
 .graph { flex: none; }
 .dag { margin: auto; }
-.graph .node { cursor: pointer; outline: none; }
-.graph .node:focus-visible { outline: var(--border-2) solid var(--focus); outline-offset: 2px; }
-.graph .node rect {
+.graph [role='button'] { cursor: pointer; outline: none; }
+.graph [role='button']:focus-visible { outline: var(--border-2) solid var(--focus); outline-offset: 2px; }
+.graph .node > rect {
   fill: var(--surface-raised);
   stroke: var(--stroke);
   stroke-width: var(--border-1);
@@ -138,14 +138,14 @@
 }
 .graph .node text { text-anchor: middle; dominant-baseline: central; user-select: none; }
 .graph .node tspan { fill: var(--ink-subtle); }
-.graph .node:hover rect { stroke: var(--stroke-strong); }
+.graph .node:hover > rect { stroke: var(--stroke-strong); }
 /* three strengths under a focus: the focused node takes the bright edge, what it reaches
    steps up the ladder, fill and edge together, and the rest recede */
-.graph .node:is(.down, .focus) rect { fill: var(--surface-overlay); stroke: var(--stroke-strong); }
-.graph .node.focus rect { stroke: var(--stroke-bright); stroke-width: var(--border-2); }
-.graph .node.off rect { fill: var(--surface); stroke: var(--stroke-subtle); }
+.graph .node:is(.down, .focus) > rect { fill: var(--surface-overlay); stroke: var(--stroke-strong); }
+.graph .node.focus > rect { stroke: var(--stroke-bright); stroke-width: var(--border-2); }
+.graph .node.off > rect { fill: var(--surface); stroke: var(--stroke-subtle); }
 .graph .node.off :is(text, tspan) { fill: var(--ink-subtle); }
-.graph .node.off:hover rect { stroke: var(--stroke); }
+.graph .node.off:hover > rect { stroke: var(--stroke); }
 
 /* floats over the canvas corner, clear of a scrollbar */
 .zoom {
@@ -198,24 +198,28 @@
 .seg input:focus-visible { outline: var(--border-2) solid var(--focus); outline-offset: 2px; }
 
 /* ---------- module items ---------- */
-/* two equal panes sharing one rule: the module tree over the item list */
-.halves { display: grid; grid-template-rows: repeat(2, minmax(0, 1fr)); flex: 1; min-height: 0; border: var(--border-1) solid var(--stroke); }
-.half { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.half + .half { border-top: var(--border-1) solid var(--stroke); }
-.half-head {
+/* the filters, then the focus, sit on the tree's canvas and share its edge */
+.frame { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-4);
   min-height: 28px;
   padding: var(--space-2) var(--space-4);
-  border-bottom: var(--border-1) solid var(--stroke-subtle);
+  border: var(--border-1) solid var(--stroke);
+  border-bottom: 0;
 }
-.half-head p { margin: 0; overflow-wrap: anywhere; }
-.half-head .switch { margin-left: auto; }
-.half-body { flex: 1; min-height: 0; overflow: auto; }
-.half-body > p { margin: var(--space-4); }
-/* the tree's canvas: the pane already draws its edges */
-.half .stage { border: 0; }
+.bar + .bar { border-top-color: var(--stroke-subtle); }
+.bar :is(p, .kinds) { flex: 1; margin: 0; overflow-wrap: anywhere; }
+
+/* a module is a box that opens downward: its header, then a line per item */
+.tree .node text { text-anchor: start; }
+.tree .node .end { text-anchor: end; }
+.tree .node .faint { fill: var(--ink-subtle); }
+.tree .hit { fill: transparent; transition: fill var(--duration-ui) var(--ease-continuous); }
+.tree .item:hover .hit { fill: var(--tint-hover); }
+.tree .item[aria-pressed='true'] .hit { fill: var(--tint-active); }
 
 .switch { display: flex; flex: none; align-items: center; gap: var(--space-2); color: var(--ink-muted); cursor: pointer; }
 .switch input {
@@ -257,38 +261,6 @@
 .kinds input { position: absolute; inset: 0; margin: 0; appearance: none; cursor: pointer; }
 .kinds input:focus-visible { outline: var(--border-2) solid var(--focus); outline-offset: 2px; }
 
-.outline, .outline ul { margin: 0; padding: 0; list-style: none; }
-.outline { padding: var(--space-2) 0; }
-.line {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  box-sizing: border-box;
-  width: 100%;
-  height: 32px;
-  margin: 0;
-  padding: 0 var(--space-4) 0 calc(var(--space-4) - var(--border-2) + var(--depth) * var(--space-6));
-  color: var(--ink);
-  text-align: left;
-  white-space: nowrap;
-  background: none;
-  border: 0;
-  border-left: var(--border-2) solid transparent;
-  border-radius: var(--radius-none);
-  cursor: pointer;
-  transition: background-color var(--duration-ui) var(--ease-continuous), border-color var(--duration-ui) var(--ease-continuous);
-}
-.line:hover { background: var(--tint-hover); }
-.line:is([aria-pressed='true'], [aria-current]) { background: var(--tint-active); border-left-color: var(--stroke-bright); }
-.line:focus-visible { outline: var(--border-2) solid var(--focus); outline-offset: calc(-1 * var(--border-2)); }
-.line[aria-expanded] { font-weight: 600; }
-.line .mark { width: var(--space-4); color: var(--ink-subtle); }
-.line:hover .mark { color: var(--ink); }
-.line .faint { font-weight: 400; color: var(--ink-subtle); }
-.line:is([aria-pressed='true'], [aria-current]) .faint { color: var(--ink-muted); }
-/* one width for every kind, so names line up */
-.line .fl-tag { justify-content: center; width: 64px; }
-
 .range { width: 100%; height: var(--space-4); margin: 0; appearance: none; background: none; cursor: pointer; }
 .range::-webkit-slider-runnable-track {
   box-sizing: border-box;
@@ -325,7 +297,7 @@
 .range:disabled::-moz-range-thumb { background: var(--ink-disabled); }
 
 @media (prefers-reduced-motion: reduce) {
-  .side-item, .sort, .fold, .seg label, .switch input::before, .kinds label, .line { transition: none; }
+  .side-item, .sort, .fold, .seg label, .switch input::before, .kinds label { transition: none; }
 }
 
 @media (max-width: 900px) {
@@ -335,10 +307,7 @@
   .main.fill { height: auto; }
   .main.fill:has(> .panel) { padding-right: var(--space-6); }
   .stage { flex: none; height: 70vh; }
-  .half .stage { flex: 1; height: auto; }
   .panel { position: static; width: auto; border: var(--border-1) solid var(--stroke); }
-  .halves { flex: none; height: 140vh; }
-  .half-head { flex-wrap: wrap; }
 }
 @media (max-width: 480px) {
   .tiles:not(.tiles-2) { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -15,9 +15,8 @@ per line) loads too.
 
 - `src/report.ts`: report types, validation, merging.
 - `src/overview.tsx`: the overview screen.
-- `src/items.tsx`: the module items screen: a module tree over a list of each module's items. Focusing an item
-  draws arrows from its module to the modules that import it and on from those that re-export it; picking a module
-  in the tree focuses it in the list.
+- `src/items.tsx`: the module items screen: a module tree where a module opens to list its items. Focusing an item
+  draws arrows from it to the modules that import it and on from those that re-export it.
 - `src/dependencies.tsx`: the external dependencies screen, a layered graph laid out by `elkjs`.
 - `src/canvas.tsx`: the zooming, panning SVG canvas both of those draw in.
 - `flint/`: the Flint design system's runtime files (tokens, fonts, component bundle). Styles in `src/app.css` use its
