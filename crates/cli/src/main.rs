@@ -1,8 +1,9 @@
 //! `rust-view`: one JSON report per crate of the given cargo projects.
 
-use rust_view_core::report::{DepKind, DepSource, Dependency};
+use rust_view_core::report::{self, DepKind, DepSource, Dependency};
 use rust_view_core::{CrateInput, Source, analyze};
 use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -55,17 +56,24 @@ impl fmt::Display for Error {
     }
 }
 
-/// The parts of `cargo metadata --no-deps` used here.
+/// The parts of `cargo metadata` used here.
 #[derive(Deserialize)]
 struct Metadata {
+    /// Workspace members and, when resolved, every package they depend on.
     packages: Vec<Package>,
+    workspace_members: Vec<String>,
+    /// `None` under `--no-deps`.
+    resolve: Option<Resolve>,
     workspace_root: PathBuf,
     target_directory: PathBuf,
 }
 
 #[derive(Deserialize)]
 struct Package {
+    id: String,
     name: String,
+    version: String,
+    source: Option<String>,
     manifest_path: PathBuf,
     dependencies: Vec<Dep>,
     targets: Vec<Target>,
@@ -82,6 +90,28 @@ struct Dep {
 #[derive(Deserialize)]
 struct Target {
     src_path: PathBuf,
+}
+
+#[derive(Deserialize)]
+struct Resolve {
+    nodes: Vec<Node>,
+}
+
+#[derive(Deserialize)]
+struct Node {
+    id: String,
+    deps: Vec<NodeDep>,
+}
+
+#[derive(Deserialize)]
+struct NodeDep {
+    pkg: String,
+    dep_kinds: Vec<NodeDepKind>,
+}
+
+#[derive(Deserialize)]
+struct NodeDepKind {
+    kind: Option<DepKind>,
 }
 
 fn main() -> ExitCode {
@@ -134,6 +164,7 @@ fn export(path: &Path, out: Option<&Path>) -> Result<(), Error> {
     let mut packages = meta
         .packages
         .iter()
+        .filter(|p| meta.workspace_members.contains(&p.id))
         .filter(|p| workspace || same(&manifest, &p.manifest_path))
         .peekable();
     if packages.peek().is_none() {
@@ -164,21 +195,25 @@ fn export(path: &Path, out: Option<&Path>) -> Result<(), Error> {
     Ok(())
 }
 
+/// `cargo metadata` with dependencies resolved, or without if they can't be (e.g. offline).
 fn metadata(manifest: &Path) -> Result<Metadata, Error> {
+    query(manifest, &[]).or_else(|e| {
+        let meta = query(manifest, &["--no-deps"])?;
+        eprintln!("warning: dependency graph omitted: {e}");
+        Ok(meta)
+    })
+}
+
+fn query(manifest: &Path, flags: &[&str]) -> Result<Metadata, Error> {
     let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let failed = |message: String| Error::Cargo {
         manifest: manifest.to_path_buf(),
         message,
     };
     let output = Command::new(cargo)
-        .args([
-            "metadata",
-            "--no-deps",
-            "--format-version",
-            "1",
-            "--manifest-path",
-        ])
+        .args(["metadata", "--format-version", "1", "--manifest-path"])
         .arg(manifest)
+        .args(flags)
         .output()
         .map_err(|e| failed(e.to_string()))?;
     if !output.status.success() {
@@ -216,8 +251,10 @@ fn input(package: &Package, meta: &Metadata) -> CrateInput {
     }
     CrateInput {
         name: package.name.clone(),
+        version: package.version.clone(),
         path: relative(base, dir).unwrap_or_else(|| ".".into()),
         dependencies: package.dependencies.iter().map(dependency).collect(),
+        packages: packages(package, meta),
         roots: package
             .targets
             .iter()
@@ -227,12 +264,66 @@ fn input(package: &Package, meta: &Metadata) -> CrateInput {
     }
 }
 
-fn dependency(dep: &Dep) -> Dependency {
-    let source = match dep.source.as_deref() {
+/// `root` and everything it transitively depends on, by name then version. Empty if unresolved.
+fn packages(root: &Package, meta: &Metadata) -> Vec<report::Package> {
+    let Some(resolve) = &meta.resolve else {
+        return Vec::new();
+    };
+    let by_id: HashMap<&str, &Package> = meta.packages.iter().map(|p| (p.id.as_str(), p)).collect();
+    let nodes: HashMap<&str, &Node> = resolve.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
+    let mut seen = HashSet::from([root.id.as_str()]);
+    let mut queue = vec![root.id.as_str()];
+    let mut out = Vec::new();
+    while let Some(id) = queue.pop() {
+        let (Some(package), Some(node)) = (by_id.get(id), nodes.get(id)) else {
+            continue;
+        };
+        let mut dependencies = Vec::new();
+        for dep in &node.deps {
+            let Some(target) = by_id.get(dep.pkg.as_str()) else {
+                continue;
+            };
+            if seen.insert(&dep.pkg) {
+                queue.push(&dep.pkg);
+            }
+            // One entry per kind; a kind repeats when it is declared for several targets.
+            let mut kinds = Vec::new();
+            for kind in dep
+                .dep_kinds
+                .iter()
+                .map(|k| k.kind.unwrap_or(DepKind::Normal))
+            {
+                if !kinds.contains(&kind) {
+                    kinds.push(kind);
+                    dependencies.push(report::PackageDep {
+                        name: target.name.clone(),
+                        version: target.version.clone(),
+                        kind,
+                    });
+                }
+            }
+        }
+        out.push(report::Package {
+            name: package.name.clone(),
+            version: package.version.clone(),
+            source: source(package.source.as_deref()),
+            dependencies,
+        });
+    }
+    out.sort_by(|a, b| (&a.name, &a.version).cmp(&(&b.name, &b.version)));
+    out
+}
+
+fn source(source: Option<&str>) -> DepSource {
+    match source {
         None => DepSource::Path,
         Some(s) if s.starts_with("git+") => DepSource::Git,
         Some(_) => DepSource::Registry,
-    };
+    }
+}
+
+fn dependency(dep: &Dep) -> Dependency {
+    let source = source(dep.source.as_deref());
     // cargo prints a bare `1.2` as `^1.2`, and no requirement as `*`.
     let req = match (dep.req.as_str(), source) {
         ("*", DepSource::Path | DepSource::Git) => None,

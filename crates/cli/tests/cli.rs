@@ -50,6 +50,35 @@ fn workspace_reports_each_crate() {
 }
 
 #[test]
+fn packages_are_the_resolved_closure() {
+    let reports = reports(".");
+    let cli = &reports[0].crates[0];
+    let has = |name: &str, version: &str| {
+        cli.packages
+            .iter()
+            .any(|p| p.name == name && p.version == version)
+    };
+    // Itself, a direct dependency, and one reached only through `rust-view-core`.
+    assert!(has("rust-view-cli", &cli.version));
+    assert!(
+        ["rust-view-core", "serde_json", "syn"]
+            .iter()
+            .all(|name| { cli.packages.iter().any(|p| p.name == *name) })
+    );
+    assert!(
+        cli.packages
+            .iter()
+            .flat_map(|p| &p.dependencies)
+            .all(|d| has(&d.name, &d.version))
+    );
+    assert!(
+        cli.packages
+            .windows(2)
+            .all(|w| (&w[0].name, &w[0].version) < (&w[1].name, &w[1].version))
+    );
+}
+
+#[test]
 fn crate_reports_itself() {
     assert_eq!(names(&reports(".")), ["rust-view-cli"]);
     assert_eq!(names(&reports("../core/Cargo.toml")), ["rust-view-core"]);
