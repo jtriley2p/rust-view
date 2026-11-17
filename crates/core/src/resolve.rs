@@ -25,8 +25,9 @@ impl<'a> Index<'a> {
                 continue;
             };
             let key = |scope| (place.root, scoped(&place.module, scope));
-            for (scope, name) in &scan.defs {
-                modules.entry(key(scope)).or_default().defs.insert(name);
+            for d in &scan.defs {
+                let module = modules.entry(key(&d.scope)).or_default();
+                module.defs.insert(&d.name);
             }
             for u in scan.uses.iter().filter(|u| u.public) {
                 modules.entry(key(&u.scope)).or_default().pubs.push(u);

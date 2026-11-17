@@ -8,7 +8,7 @@ mod scan;
 
 pub use report::Report;
 
-use report::{Crate, Dependency, File, Metrics, Package, Totals};
+use report::{Crate, Definition, Dependency, File, Metrics, Package, Totals};
 use std::collections::HashMap;
 use std::fmt;
 
@@ -104,7 +104,8 @@ pub fn analyze(crates: &[CrateInput]) -> Analysis {
                 continue;
             };
             let mut metrics = scan.metrics;
-            let (mut imports, mut reexports) = (Vec::new(), Vec::new());
+            let (mut definitions, mut imports, mut reexports) =
+                (Vec::new(), Vec::new(), Vec::new());
             if place.test {
                 // The whole file is test code.
                 metrics = Metrics {
@@ -114,6 +115,18 @@ pub fn analyze(crates: &[CrateInput]) -> Analysis {
                 };
                 metrics.lines.test += std::mem::take(&mut metrics.lines.code);
             } else {
+                definitions = scan
+                    .defs
+                    .iter()
+                    .filter_map(|d| {
+                        Some(Definition {
+                            name: d.name.clone(),
+                            kind: d.kind?,
+                            module: modules::scoped(&place.module, &d.scope),
+                            public: d.public,
+                        })
+                    })
+                    .collect();
                 imports = index.imports(&f.path, place, scan);
                 reexports = index.reexports(place, scan);
             }
@@ -121,7 +134,9 @@ pub fn analyze(crates: &[CrateInput]) -> Analysis {
             files.push(File {
                 path: f.path.clone(),
                 module: place.module.clone(),
+                root: krate.roots.get(place.root).cloned().unwrap_or_default(),
                 metrics,
+                definitions,
                 imports,
                 reexports,
             });

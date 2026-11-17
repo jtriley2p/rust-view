@@ -208,6 +208,7 @@ fn analyzes_a_crate() {
         json!({
             "path": "crates/core/src/lib.rs",
             "module": "crate",
+            "root": "crates/core/src/lib.rs",
             "lines": { "code": 7, "test": 0, "doc": 1, "comment": 0, "blank": 2 },
             "tests": { "count": 0, "ignored": 0 },
             "items": {
@@ -217,6 +218,7 @@ fn analyzes_a_crate() {
             "functional": { "closures": 0, "combinators": 0, "higher_order_fns": 0 },
             "suppressions": { "todo": 0, "unimplemented": 0, "unreachable": 0, "allow": 0 },
             "error_handling": { "unwrap": 0, "expect": 0, "panic": 0, "propagate": 0 },
+            "definitions": [{ "name": "Result", "kind": "type", "module": "crate", "public": true }],
             "imports": [
                 { "module": "crate::error", "file": "crates/core/src/error.rs", "names": ["Error"] },
                 { "module": "crate::store", "file": "crates/core/src/store.rs", "names": ["Entry", "Store"] }
@@ -316,6 +318,16 @@ fn analyzes_a_crate() {
         ]
     );
     assert_eq!(store.reexports.len(), 1);
+    // Methods and test code are not definitions.
+    let definitions: Vec<_> = store
+        .definitions
+        .iter()
+        .map(|d| (d.name.as_str(), d.kind, d.module.as_str(), d.public))
+        .collect();
+    assert_eq!(
+        definitions,
+        [("Store", ItemKind::Struct, "crate::store", true)]
+    );
 
     assert_eq!(
         wal.metrics.suppressions,
@@ -350,7 +362,11 @@ fn analyzes_a_crate() {
             ..Default::default()
         }
     );
-    assert!(roundtrip.imports.is_empty());
+    assert!(roundtrip.imports.is_empty() && roundtrip.definitions.is_empty());
+    assert_eq!(
+        (store.root.as_str(), roundtrip.root.as_str()),
+        ("crates/core/src/lib.rs", "crates/core/tests/roundtrip.rs")
+    );
 
     let mut sum = Totals::default();
     krate.files.iter().for_each(|f| {

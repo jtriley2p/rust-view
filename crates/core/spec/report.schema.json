@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["version", "totals", "crates"],
   "properties": {
-    "version": { "description": "Schema version. Bumped on any breaking change.", "const": 3 },
+    "version": { "description": "Schema version. Bumped on any breaking change.", "const": 4 },
     "totals": { "description": "Sum over all crates.", "$ref": "#/$defs/totals" },
     "crates": { "type": "array", "items": { "$ref": "#/$defs/crate" } }
   },
@@ -86,18 +86,20 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "path", "module", "lines", "tests", "items", "functional",
-        "suppressions", "error_handling", "imports", "reexports"
+        "path", "module", "root", "lines", "tests", "items", "functional",
+        "suppressions", "error_handling", "definitions", "imports", "reexports"
       ],
       "properties": {
-        "path": { "description": "Unique across the report; the key that `file` fields in `imports` and `reexports` refer to.", "type": "string" },
+        "path": { "description": "Unique across the report; the key that `root` and the `file` fields in `imports` and `reexports` refer to.", "type": "string" },
         "module": { "description": "Module path of the file within its target, rooted at `crate`.", "type": "string" },
+        "root": { "description": "`path` of the root file of the target the file belongs to. Module paths are unique within a target, not within a crate.", "type": "string" },
         "lines": { "$ref": "#/$defs/lines" },
         "tests": { "$ref": "#/$defs/tests" },
         "items": { "$ref": "#/$defs/items" },
         "functional": { "$ref": "#/$defs/functional" },
         "suppressions": { "$ref": "#/$defs/suppressions" },
         "error_handling": { "$ref": "#/$defs/error_handling" },
+        "definitions": { "description": "Named items in source order. Empty for a test file.", "type": "array", "items": { "$ref": "#/$defs/definition" } },
         "imports": { "type": "array", "items": { "$ref": "#/$defs/import" } },
         "reexports": { "type": "array", "items": { "$ref": "#/$defs/reexport" } }
       }
@@ -177,6 +179,18 @@
         "expect": { "description": "`.expect(..)` calls.", "$ref": "#/$defs/count" },
         "panic": { "description": "`panic!` invocations.", "$ref": "#/$defs/count" },
         "propagate": { "description": "`?` operators.", "$ref": "#/$defs/count" }
+      }
+    },
+    "definition": {
+      "description": "A named item outside test code and outside fn bodies. Modules, `impl` blocks, and methods are not listed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "module", "public"],
+      "properties": {
+        "name": { "type": "string" },
+        "kind": { "enum": ["struct", "enum", "union", "trait", "fn", "const", "static", "type", "macro"] },
+        "module": { "description": "Absolute path of the module defining the item: the file's `module`, extended by any inline modules around the item.", "type": "string" },
+        "public": { "description": "Has a visibility modifier (`pub`, `pub(crate)`, ..); for a macro, `#[macro_export]`.", "type": "boolean" }
       }
     },
     "import": {

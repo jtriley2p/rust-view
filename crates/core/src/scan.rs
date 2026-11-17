@@ -1,7 +1,7 @@
 //! Per-file facts gathered in one pass over the syntax tree.
 
 use crate::lines;
-use crate::report::Metrics;
+use crate::report::{ItemKind, Metrics};
 use proc_macro2::{Delimiter, TokenStream, TokenTree};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
@@ -72,8 +72,19 @@ pub struct Scan {
     pub metrics: Metrics,
     pub mods: Vec<Mod>,
     pub uses: Vec<Use>,
-    /// Item names by enclosing inline module.
-    pub defs: Vec<(Vec<String>, String)>,
+    pub defs: Vec<Def>,
+}
+
+/// A named item. `scope` is the chain of inline modules enclosing it.
+#[derive(Debug)]
+pub struct Def {
+    pub scope: Vec<String>,
+    pub name: String,
+    /// None for a `mod`, an unnamed `const`, an item local to a block, and a name scraped
+    /// from a macro body.
+    pub kind: Option<ItemKind>,
+    /// Has a visibility modifier; `#[macro_export]` for a macro.
+    pub public: bool,
 }
 
 /// Keywords that introduce a named item.
@@ -81,7 +92,7 @@ const ITEM_KEYWORDS: &[&str] = &[
     "struct", "enum", "union", "trait", "fn", "type", "const", "static", "mod",
 ];
 
-/// A `mod` item. `scope` is the chain of inline modules enclosing it.
+/// A `mod` item. `scope` as in [`Def`].
 #[derive(Debug)]
 pub struct Mod {
     pub scope: Vec<String>,
@@ -131,6 +142,8 @@ struct Visitor {
     out: Scan,
     /// Inline modules enclosing the current node.
     scope: Vec<String>,
+    /// Blocks enclosing the current node.
+    blocks: u32,
     /// Line ranges of test code.
     tests: Vec<(usize, usize)>,
 }
@@ -155,20 +168,43 @@ impl Visitor {
 
     fn item(&mut self, item: &Item) {
         let m = &mut self.out.metrics;
-        let (count, name) = match item {
-            Item::Struct(i) => (&mut m.items.r#struct, Some(&i.ident)),
-            Item::Enum(i) => (&mut m.items.r#enum, Some(&i.ident)),
-            Item::Union(i) => (&mut m.items.union, Some(&i.ident)),
-            Item::Trait(i) => (&mut m.items.r#trait, Some(&i.ident)),
-            Item::Impl(_) => (&mut m.items.r#impl, None),
-            Item::Fn(i) => (&mut m.items.r#fn, Some(&i.sig.ident)),
-            Item::Const(i) => (&mut m.items.r#const, Some(&i.ident)),
-            Item::Static(i) => (&mut m.items.r#static, Some(&i.ident)),
-            Item::Type(i) => (&mut m.items.r#type, Some(&i.ident)),
-            Item::Mod(i) => (&mut m.items.r#mod, Some(&i.ident)),
+        let vis = |v: &syn::Visibility| !matches!(v, syn::Visibility::Inherited);
+        let (count, name, kind, public) = match item {
+            Item::Struct(i) => (
+                &mut m.items.r#struct,
+                &i.ident,
+                ItemKind::Struct,
+                vis(&i.vis),
+            ),
+            Item::Enum(i) => (&mut m.items.r#enum, &i.ident, ItemKind::Enum, vis(&i.vis)),
+            Item::Union(i) => (&mut m.items.union, &i.ident, ItemKind::Union, vis(&i.vis)),
+            Item::Trait(i) => (&mut m.items.r#trait, &i.ident, ItemKind::Trait, vis(&i.vis)),
+            Item::Fn(i) => (&mut m.items.r#fn, &i.sig.ident, ItemKind::Fn, vis(&i.vis)),
+            Item::Const(i) => (&mut m.items.r#const, &i.ident, ItemKind::Const, vis(&i.vis)),
+            Item::Static(i) => (
+                &mut m.items.r#static,
+                &i.ident,
+                ItemKind::Static,
+                vis(&i.vis),
+            ),
+            Item::Type(i) => (&mut m.items.r#type, &i.ident, ItemKind::Type, vis(&i.vis)),
             Item::Macro(syn::ItemMacro {
-                ident: Some(ident), ..
-            }) => (&mut m.items.r#macro, Some(ident)),
+                ident: Some(ident),
+                attrs,
+                ..
+            }) => {
+                let exported = attrs.iter().any(|a| a.path().is_ident("macro_export"));
+                (&mut m.items.r#macro, ident, ItemKind::Macro, exported)
+            }
+            Item::Mod(i) => {
+                m.items.r#mod += 1;
+                self.def(i.ident.to_string(), None, vis(&i.vis));
+                return visit::visit_item(self, item);
+            }
+            Item::Impl(_) => {
+                m.items.r#impl += 1;
+                return visit::visit_item(self, item);
+            }
             _ => return visit::visit_item(self, item),
         };
         *count += 1;
@@ -178,10 +214,18 @@ impl Visitor {
             m.tests.count += 1;
             m.tests.ignored += f.attrs.iter().any(|a| a.path().is_ident("ignore")) as u32;
         }
-        if let Some(name) = name {
-            self.out.defs.push((self.scope.clone(), name.to_string()));
-        }
+        // `const _` names nothing.
+        self.def(name.to_string(), (name != "_").then_some(kind), public);
         visit::visit_item(self, item)
+    }
+
+    fn def(&mut self, name: String, kind: Option<ItemKind>, public: bool) {
+        self.out.defs.push(Def {
+            scope: self.scope.clone(),
+            name,
+            kind: kind.filter(|_| self.blocks == 0),
+            public,
+        });
     }
 
     /// Counts a macro call and visits its arguments; false if they are not an expression list.
@@ -218,7 +262,7 @@ impl Visitor {
                     // `static mut X`, `static ref X`, `const unsafe fn x`, `const _`
                     "mut" | "ref" | "unsafe" | "async" | "extern" | "_" => {}
                     name if keyword => {
-                        self.out.defs.push((self.scope.clone(), name.to_string()));
+                        self.def(name.to_string(), None, false);
                         keyword = false;
                     }
                     _ => {}
@@ -296,6 +340,12 @@ impl<'ast> Visit<'ast> for Visitor {
         self.scope.push(i.ident.to_string());
         visit::visit_item_mod(self, i);
         self.scope.pop();
+    }
+
+    fn visit_block(&mut self, i: &'ast syn::Block) {
+        self.blocks += 1;
+        visit::visit_block(self, i);
+        self.blocks -= 1;
     }
 
     fn visit_item_use(&mut self, i: &'ast syn::ItemUse) {
@@ -547,6 +597,46 @@ mod tests {
     }
 
     #[test]
+    fn defs() {
+        let s = scan(
+            r#"
+            pub struct A;
+            pub(crate) enum B {}
+            trait T { fn m(&self); }
+            impl A { pub fn m(&self) {} }
+            fn f() { struct Local; }
+            const _: () = ();
+            #[macro_export]
+            macro_rules! mac { () => {} }
+            macro_rules! own { () => {} }
+            pub mod m { pub(super) static S: u8 = 0; type Alias = u8; }
+            "#,
+        )
+        .unwrap();
+        let got: Vec<_> = s
+            .defs
+            .iter()
+            .filter_map(|d| Some((d.scope.join("::"), d.name.as_str(), d.kind?, d.public)))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("".into(), "A", ItemKind::Struct, true),
+                ("".into(), "B", ItemKind::Enum, true),
+                ("".into(), "T", ItemKind::Trait, false),
+                ("".into(), "f", ItemKind::Fn, false),
+                ("".into(), "mac", ItemKind::Macro, true),
+                ("".into(), "own", ItemKind::Macro, false),
+                ("m".into(), "S", ItemKind::Static, true),
+                ("m".into(), "Alias", ItemKind::Type, false),
+            ]
+        );
+        let untyped: Vec<_> = s.defs.iter().filter(|d| d.kind.is_none()).collect();
+        let names: Vec<_> = untyped.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(names, ["Local", "_", "m"]);
+    }
+
+    #[test]
     fn test_code_is_excluded() {
         let text = "\
 fn f() {}
@@ -594,10 +684,8 @@ fn c() {}
             }
         );
         assert!(s.uses.is_empty());
-        assert_eq!(
-            s.defs,
-            [(vec![], "f".to_string()), (vec![], "g".to_string())]
-        );
+        let defs: Vec<_> = s.defs.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(defs, ["f", "g"]);
         let helpers = s.mods.iter().find(|m| m.name == "helpers").unwrap();
         assert!(helpers.test && !helpers.inline && helpers.scope == ["tests"]);
     }
@@ -697,10 +785,10 @@ fn c() {}
         let defs: Vec<_> = s
             .defs
             .iter()
-            .map(|(scope, name)| {
-                scope
+            .map(|d| {
+                d.scope
                     .iter()
-                    .chain([name])
+                    .chain([&d.name])
                     .cloned()
                     .collect::<Vec<_>>()
                     .join("::")

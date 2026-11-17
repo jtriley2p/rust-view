@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "totals": {
     "files": 7,
     "lines": { "code": 342, "test": 138, "doc": 31, "comment": 19, "blank": 82 },
@@ -81,6 +81,7 @@
         {
           "path": "crates/core/src/lib.rs",
           "module": "crate",
+          "root": "crates/core/src/lib.rs",
           "lines": { "code": 10, "test": 0, "doc": 3, "comment": 1, "blank": 3 },
           "tests": { "count": 0, "ignored": 0 },
           "items": {
@@ -90,6 +91,9 @@
           "functional": { "closures": 0, "combinators": 0, "higher_order_fns": 0 },
           "suppressions": { "todo": 0, "unimplemented": 0, "unreachable": 0, "allow": 0 },
           "error_handling": { "unwrap": 0, "expect": 0, "panic": 0, "propagate": 0 },
+          "definitions": [
+            { "name": "Result", "kind": "type", "module": "crate", "public": true }
+          ],
           "imports": [
             { "module": "crate::error", "file": "crates/core/src/error.rs", "names": ["Error"] },
             { "module": "crate::store", "file": "crates/core/src/store.rs", "names": ["Entry", "Store"] }
@@ -123,6 +127,7 @@
         {
           "path": "crates/core/src/error.rs",
           "module": "crate::error",
+          "root": "crates/core/src/lib.rs",
           "lines": { "code": 24, "test": 0, "doc": 4, "comment": 1, "blank": 4 },
           "tests": { "count": 0, "ignored": 0 },
           "items": {
@@ -132,12 +137,16 @@
           "functional": { "closures": 0, "combinators": 0, "higher_order_fns": 0 },
           "suppressions": { "todo": 0, "unimplemented": 0, "unreachable": 0, "allow": 0 },
           "error_handling": { "unwrap": 0, "expect": 0, "panic": 0, "propagate": 0 },
+          "definitions": [
+            { "name": "Error", "kind": "enum", "module": "crate::error", "public": true }
+          ],
           "imports": [],
           "reexports": []
         },
         {
           "path": "crates/core/src/store.rs",
           "module": "crate::store",
+          "root": "crates/core/src/lib.rs",
           "lines": { "code": 142, "test": 58, "doc": 14, "comment": 7, "blank": 33 },
           "tests": { "count": 7, "ignored": 1 },
           "items": {
@@ -147,6 +156,14 @@
           "functional": { "closures": 9, "combinators": 17, "higher_order_fns": 2 },
           "suppressions": { "todo": 0, "unimplemented": 0, "unreachable": 1, "allow": 1 },
           "error_handling": { "unwrap": 1, "expect": 2, "panic": 0, "propagate": 14 },
+          "definitions": [
+            { "name": "MAX_KEY_LEN", "kind": "const", "module": "crate::store", "public": true },
+            { "name": "Store", "kind": "struct", "module": "crate::store", "public": true },
+            { "name": "Snapshot", "kind": "struct", "module": "crate::store", "public": true },
+            { "name": "Visit", "kind": "trait", "module": "crate::store", "public": true },
+            { "name": "open", "kind": "fn", "module": "crate::store", "public": true },
+            { "name": "check_key", "kind": "fn", "module": "crate::store", "public": false }
+          ],
           "imports": [
             { "module": "crate::error", "file": "crates/core/src/error.rs", "names": ["Error"] },
             { "module": "crate::wal", "file": "crates/core/src/wal.rs", "names": ["Entry", "Wal"] }
@@ -162,6 +179,7 @@
         {
           "path": "crates/core/src/wal.rs",
           "module": "crate::wal",
+          "root": "crates/core/src/lib.rs",
           "lines": { "code": 87, "test": 22, "doc": 5, "comment": 4, "blank": 18 },
           "tests": { "count": 3, "ignored": 0 },
           "items": {
@@ -171,6 +189,13 @@
           "functional": { "closures": 2, "combinators": 5, "higher_order_fns": 0 },
           "suppressions": { "todo": 2, "unimplemented": 0, "unreachable": 0, "allow": 0 },
           "error_handling": { "unwrap": 4, "expect": 0, "panic": 1, "propagate": 6 },
+          "definitions": [
+            { "name": "MAGIC", "kind": "const", "module": "crate::wal", "public": false },
+            { "name": "SEGMENT_BYTES", "kind": "const", "module": "crate::wal", "public": true },
+            { "name": "Entry", "kind": "struct", "module": "crate::wal", "public": true },
+            { "name": "Wal", "kind": "struct", "module": "crate::wal", "public": true },
+            { "name": "checksum", "kind": "fn", "module": "crate::wal", "public": false }
+          ],
           "imports": [
             { "module": "crate::error", "file": "crates/core/src/error.rs", "names": ["Error"] }
           ],
@@ -179,6 +204,7 @@
         {
           "path": "crates/core/tests/roundtrip.rs",
           "module": "crate",
+          "root": "crates/core/tests/roundtrip.rs",
           "lines": { "code": 0, "test": 46, "doc": 0, "comment": 2, "blank": 9 },
           "tests": { "count": 4, "ignored": 0 },
           "items": {
@@ -188,6 +214,7 @@
           "functional": { "closures": 0, "combinators": 0, "higher_order_fns": 0 },
           "suppressions": { "todo": 0, "unimplemented": 0, "unreachable": 0, "allow": 0 },
           "error_handling": { "unwrap": 0, "expect": 0, "panic": 0, "propagate": 0 },
+          "definitions": [],
           "imports": [],
           "reexports": []
         }
@@ -291,6 +318,7 @@
         {
           "path": "crates/cli/src/main.rs",
           "module": "crate",
+          "root": "crates/cli/src/main.rs",
           "lines": { "code": 48, "test": 0, "doc": 2, "comment": 1, "blank": 8 },
           "tests": { "count": 0, "ignored": 0 },
           "items": {
@@ -300,6 +328,11 @@
           "functional": { "closures": 1, "combinators": 3, "higher_order_fns": 0 },
           "suppressions": { "todo": 0, "unimplemented": 1, "unreachable": 0, "allow": 0 },
           "error_handling": { "unwrap": 0, "expect": 0, "panic": 0, "propagate": 8 },
+          "definitions": [
+            { "name": "main", "kind": "fn", "module": "crate", "public": false },
+            { "name": "run", "kind": "fn", "module": "crate", "public": false },
+            { "name": "print", "kind": "fn", "module": "crate", "public": false }
+          ],
           "imports": [
             { "module": "crate::args", "file": "crates/cli/src/args.rs", "names": ["Args", "Command"] }
           ],
@@ -308,6 +341,7 @@
         {
           "path": "crates/cli/src/args.rs",
           "module": "crate::args",
+          "root": "crates/cli/src/main.rs",
           "lines": { "code": 31, "test": 12, "doc": 3, "comment": 3, "blank": 7 },
           "tests": { "count": 2, "ignored": 0 },
           "items": {
@@ -317,6 +351,10 @@
           "functional": { "closures": 0, "combinators": 0, "higher_order_fns": 0 },
           "suppressions": { "todo": 0, "unimplemented": 0, "unreachable": 0, "allow": 0 },
           "error_handling": { "unwrap": 0, "expect": 0, "panic": 0, "propagate": 0 },
+          "definitions": [
+            { "name": "Args", "kind": "struct", "module": "crate::args", "public": true },
+            { "name": "Command", "kind": "enum", "module": "crate::args", "public": true }
+          ],
           "imports": [],
           "reexports": []
         }

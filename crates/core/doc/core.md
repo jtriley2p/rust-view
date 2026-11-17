@@ -17,15 +17,19 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
 ### Report
 
 - Shape: `report -> crates[] -> files[]`, with `totals` on the report and on each crate.
-- Per file: `lines`, `tests`, `items`, `functional`, `suppressions`, `error_handling`,
-  `imports`, `reexports`.
+- Per file: `root`, `lines`, `tests`, `items`, `functional`, `suppressions`, `error_handling`,
+  `definitions`, `imports`, `reexports`.
+- `root` names the file's target. Module paths repeat across a crate's targets (each has its own
+  `crate`), so consumers key modules by root and module.
 - Per crate: `version`, `dependencies` (declared: name, req, kind, source), and `packages`
   (resolved: the crate plus everything it transitively depends on, each with name, version,
   source, and edges by name, version, and kind).
 - Each report carries its crate's whole closure, so one report draws a full graph; consumers
   merge packages across reports by name and version.
-- Counts only: no line locations, no per-name breakdowns.
-- Totals sum the per-file counts, plus a `files` count. Imports and re-exports are not totalled.
+- Counts, plus names where a consumer needs them to connect things (`definitions`, `imports`,
+  `reexports`). No line locations.
+- Totals sum the per-file counts, plus a `files` count. Definitions, imports, and re-exports are
+  not totalled.
 - Unknown keys are rejected; any shape change bumps `version`.
 - Dropped: test coverage, dead item count.
 
@@ -39,6 +43,10 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
 - **Lines**: code if a token touches the line, else blank if empty, else doc if a doc comment
   touches it, else comment. `#[doc = ..]` attributes are doc comments; `#[doc(..)]` is code.
   Doc lines inside test code stay doc.
+- **Definitions**: each named item with its kind, defining module (inline modules included), and
+  whether it has a visibility modifier (`pub(crate)` counts; a macro needs `#[macro_export]`).
+  Left out: `mod`s (the module paths carry them), `impl` blocks, methods, `const _`, and items
+  local to a fn body.
 - **Imports**: one edge per target module, keyed by file. `use` declarations plus qualified
   `crate`/`self`/`super` paths. Same-file targets are omitted. Re-exports are not followed.
 - **Unprefixed `use` paths** resolve when the current module defines the first segment.
@@ -54,7 +62,8 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
 - **Macro-generated names are invisible.** Items written inside a call are seen; names a macro
   builds from its arguments or a derive generates are not, and re-exports of them end as
   `unresolved` (81 of 123 in http).
-- **Scraped names are fuzzy.** They are definitions only, not counted as items, and can be wrong
+- **Scraped names are fuzzy.** They serve name resolution only, are neither counted as items nor
+  listed in `definitions`, and can be wrong
   (a method in an `impl`-like macro, `N` in `<const N: usize>`). A scraped `mod` is not followed.
 - **Foreign items are not definitions.** `fn`s and `static`s in `extern` blocks are not
   recorded; re-exports of them end as `unresolved` (most of libc's 222).
@@ -62,6 +71,7 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
   slice `last`; false positives such as `str::find` remain.
 - **Orphans are common.** Fixture files (e.g. trybuild's `tests/ui/*.rs`) are reported as
   `Orphan`; the CLI should treat them as warnings.
+- **`public` is the modifier, not reachability.** A `pub` item in a private module is `public`.
 - **Re-exports in inline modules lose their scope.** They are listed under the file with no
   record of the inline module they are exported from.
 - **A binary importing its own library** (`use my_pkg::x` in `main.rs`) is treated as external.

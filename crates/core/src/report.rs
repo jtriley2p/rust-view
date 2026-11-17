@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::ops::AddAssign;
 
-pub const VERSION: u32 = 3;
+pub const VERSION: u32 = 4;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Report {
@@ -75,10 +75,38 @@ pub struct Totals {
 pub struct File {
     pub path: String,
     pub module: String,
+    /// Root file of the target the file belongs to.
+    pub root: String,
     #[serde(flatten)]
     pub metrics: Metrics,
+    pub definitions: Vec<Definition>,
     pub imports: Vec<Import>,
     pub reexports: Vec<Reexport>,
+}
+
+/// A named item other than a `mod`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Definition {
+    pub name: String,
+    pub kind: ItemKind,
+    /// The file's module, extended by any inline modules around the item.
+    pub module: String,
+    /// Has a visibility modifier; `#[macro_export]` for a macro.
+    pub public: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ItemKind {
+    Struct,
+    Enum,
+    Union,
+    Trait,
+    Fn,
+    Const,
+    Static,
+    Type,
+    Macro,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
