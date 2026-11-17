@@ -3,12 +3,13 @@ import { createRoot } from 'react-dom/client'
 import example from '../../crates/core/spec/example.json'
 import { Dependencies } from './dependencies'
 import { Button } from './flint'
+import { Items } from './items'
 import { Overview } from './overview'
 import { type Loaded, describe, load } from './report'
 
 const SCREENS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'imports', label: 'Module imports' },
+  { id: 'items', label: 'Module items' },
   { id: 'dependencies', label: 'External dependencies' },
 ] as const
 type Screen = (typeof SCREENS)[number]
@@ -88,7 +89,7 @@ function App() {
           />
         </div>
       </nav>
-      <main className={screen.id === 'dependencies' ? 'main fill' : 'main'}>
+      <main className={screen.id === 'overview' ? 'main' : 'main fill'}>
         <h1 className="title">{screen.label}</h1>
         {errors.length > 0 && (
           <ul className="errors small" role="alert">
@@ -113,7 +114,7 @@ function App() {
         ) : screen.id === 'dependencies' ? (
           <Dependencies crates={crates} />
         ) : (
-          <p className="body muted">This screen is not built yet.</p>
+          <Items crates={crates} />
         )}
       </main>
     </div>

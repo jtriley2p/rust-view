@@ -1,6 +1,6 @@
 // Types and loading for the CLI's report (crates/core/spec/report.schema.json).
 
-export const VERSION = 3
+export const VERSION = 4
 
 /** Every count at zero: the shape reports are checked against and the seed for sums. */
 export const ZERO = {
@@ -17,7 +17,23 @@ export const ZERO = {
 }
 
 export type Totals = typeof ZERO
-export type File = Omit<Totals, 'files'> & { path: string; module: string }
+export const KINDS = ['struct', 'enum', 'union', 'trait', 'fn', 'const', 'static', 'type', 'macro'] as const
+export type Kind = (typeof KINDS)[number]
+/** A named item; `module` extends the file's by any inline modules around it. */
+export type Definition = { name: string; kind: Kind; module: string; public: boolean }
+/** Names the file takes from another module of its target. `*` is a glob. */
+export type Import = { module: string; file: string; names: string[] }
+/** A `pub use` name. The first hop of `trace` is where it is taken from; `file` is null outside the crate. */
+export type Reexport = { name: string; trace: { module: string; file: string | null; name: string }[] }
+export type File = Omit<Totals, 'files'> & {
+  path: string
+  module: string
+  /** Root file of the file's target; module paths are unique within a target only. */
+  root: string
+  definitions: Definition[]
+  imports: Import[]
+  reexports: Reexport[]
+}
 export type Dependency = {
   name: string
   req: string | null
@@ -74,6 +90,15 @@ const mismatch = (v: unknown, shape: object, at: string): string | null => {
 
 const { files: _, ...FILE_ZERO } = ZERO
 
+const strings = (v: Json, ...keys: string[]) => keys.every(k => typeof v[k] === 'string')
+const each = (v: unknown, ok: (x: Json) => boolean) => Array.isArray(v) && v.every(x => isObject(x) && ok(x))
+const named = (f: unknown): f is Json =>
+  isObject(f)
+  && strings(f, 'path', 'module', 'root')
+  && each(f.definitions, d => strings(d, 'name', 'kind', 'module') && typeof d.public === 'boolean')
+  && each(f.imports, i => strings(i, 'module', 'file') && Array.isArray(i.names))
+  && each(f.reexports, r => strings(r, 'name') && each(r.trace, h => strings(h, 'module', 'name')))
+
 const versioned = (v: unknown) => isObject(v) && typeof v.name === 'string' && typeof v.version === 'string'
 
 /** The crates of one parsed report, or the first place it departs from the schema. */
@@ -89,7 +114,7 @@ const crates = (file: string, report: unknown): Crate[] | LoadError => {
       ?? c.files
         .map((f, j) => {
           const here = `${at}.files[${j}]`
-          return isObject(f) && typeof f.path === 'string' && typeof f.module === 'string' ? mismatch(f, FILE_ZERO, here) : here
+          return named(f) ? mismatch(f, FILE_ZERO, here) : here
         })
         .find(Boolean)
       ?? c.packages
