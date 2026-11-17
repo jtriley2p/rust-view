@@ -114,14 +114,135 @@
 
 .ratio { flex-direction: row; width: 160px; height: 8px; margin-left: auto; }
 
+/* ---------- dependencies ---------- */
+/* the graph takes what the window has left between the nav and the options panel, which docks to the viewport's right edge */
+.main.fill { --panel: 304px; display: flex; flex-direction: column; max-width: none; height: 100vh; padding-bottom: var(--space-6); }
+.main.fill:has(> .panel) { padding-right: calc(var(--panel) + var(--space-6)); }
+.stage { position: relative; flex: 1; min-height: 0; border: var(--border-1) solid var(--stroke); }
+.canvas { display: flex; height: 100%; overflow: auto; }
+.canvas > p { margin: var(--space-4); }
+/* zoomed past fit, the canvas pans by dragging */
+.canvas.pan { cursor: grab; }
+.canvas.pan:active, .canvas.pan:active .node { cursor: grabbing; }
+
+/* sized by the zoom; centred while smaller than the canvas, scrolled once larger */
+.dag { flex: none; margin: auto; }
+.dag .node { cursor: pointer; outline: none; }
+.dag .node:focus-visible { outline: var(--border-2) solid var(--focus); outline-offset: 2px; }
+.dag .node rect {
+  fill: var(--surface-raised);
+  stroke: var(--stroke);
+  stroke-width: var(--border-1);
+  transition: fill var(--duration-ui) var(--ease-continuous), stroke var(--duration-ui) var(--ease-continuous);
+}
+.dag .node text { text-anchor: middle; dominant-baseline: central; user-select: none; }
+.dag .node tspan { fill: var(--ink-subtle); }
+.dag .node:hover rect { stroke: var(--stroke-strong); }
+/* three strengths under a focus: the focused package takes the bright edge, what it depends on
+   steps up the ladder, fill and edge together, and the rest recede */
+.dag .node:is(.down, .focus) rect { fill: var(--surface-overlay); stroke: var(--stroke-strong); }
+.dag .node.focus rect { stroke: var(--stroke-bright); stroke-width: var(--border-2); }
+.dag .node.off rect { fill: var(--surface); stroke: var(--stroke-subtle); }
+.dag .node.off :is(text, tspan) { fill: var(--ink-subtle); }
+.dag .node.off:hover rect { stroke: var(--stroke); }
+
+/* floats over the canvas corner, clear of a scrollbar */
+.zoom {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  display: flex;
+  background: var(--surface-overlay);
+  border: var(--border-1) solid var(--stroke-strong);
+}
+.zoom .fl-btn { min-width: 28px; font-variant-numeric: tabular-nums; }
+.zoom .fl-btn:nth-child(2) { min-width: 56px; }
+.zoom .fl-btn:last-child { border-left-color: var(--stroke); }
+.zoom .fl-btn[aria-pressed='true'] { color: var(--ink); background: var(--tint-active); }
+
+.panel {
+  position: fixed;
+  inset: 0 0 0 auto;
+  box-sizing: border-box;
+  width: var(--panel);
+  overflow-y: auto;
+  background: var(--surface-raised);
+  border-left: var(--border-1) solid var(--stroke);
+}
+.panel section { display: grid; justify-items: start; gap: var(--space-3); padding: var(--space-4); }
+.panel section + section { border-top: var(--border-1) solid var(--stroke-subtle); }
+.panel :is(h2, p) { margin: 0; }
+.panel h2.label { color: var(--ink-subtle); }
+.panel .name { overflow-wrap: anywhere; }
+
+.field { display: grid; justify-self: stretch; gap: var(--space-2); min-width: 0; margin: 0; padding: 0; border: 0; }
+.field .label { padding: 0; color: var(--ink-muted); }
+.between { display: flex; align-items: baseline; justify-content: space-between; }
+
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border: var(--border-1) solid var(--stroke-strong); }
+.seg label {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 28px;
+  font: 500 14px/20px var(--font-sans);
+  color: var(--ink-muted);
+  transition: background-color var(--duration-ui) var(--ease-continuous), color var(--duration-ui) var(--ease-continuous);
+}
+.seg label + label { border-left: var(--border-1) solid var(--stroke-strong); }
+.seg label:hover { color: var(--ink); background: var(--tint-hover); }
+.seg label:has(:checked) { color: var(--ink); background: var(--tint-active); }
+/* the radio itself is the hit area and carries the focus ring */
+.seg input { position: absolute; inset: 0; margin: 0; appearance: none; cursor: pointer; }
+.seg input:focus-visible { outline: var(--border-2) solid var(--focus); outline-offset: 2px; }
+
+.range { width: 100%; height: var(--space-4); margin: 0; appearance: none; background: none; cursor: pointer; }
+.range::-webkit-slider-runnable-track {
+  box-sizing: border-box;
+  height: var(--space-2);
+  background: var(--surface-sunken);
+  border: var(--border-1) solid var(--stroke-strong);
+}
+.range::-moz-range-track {
+  box-sizing: border-box;
+  height: var(--space-2);
+  background: var(--surface-sunken);
+  border: var(--border-1) solid var(--stroke-strong);
+}
+.range::-webkit-slider-thumb {
+  width: var(--space-4);
+  height: var(--space-4);
+  margin-top: calc(-1 * var(--space-2) + var(--border-1) / 2 + 1px);
+  appearance: none;
+  background: var(--ink);
+  border-radius: var(--radius-none);
+}
+.range::-moz-range-thumb {
+  width: var(--space-4);
+  height: var(--space-4);
+  background: var(--ink);
+  border: 0;
+  border-radius: var(--radius-none);
+}
+.range:focus-visible { outline: var(--border-2) solid var(--focus); outline-offset: 2px; }
+.range:disabled { cursor: not-allowed; }
+.range:disabled::-webkit-slider-runnable-track { background: none; border-color: var(--stroke); }
+.range:disabled::-moz-range-track { background: none; border-color: var(--stroke); }
+.range:disabled::-webkit-slider-thumb { background: var(--ink-disabled); }
+.range:disabled::-moz-range-thumb { background: var(--ink-disabled); }
+
 @media (prefers-reduced-motion: reduce) {
-  .side-item, .sort, .fold { transition: none; }
+  .side-item, .sort, .fold, .seg label { transition: none; }
 }
 
 @media (max-width: 900px) {
   .shell { grid-template-columns: minmax(0, 1fr); }
   .side { position: static; height: auto; border-right: 0; border-bottom: var(--border-1) solid var(--stroke); }
   .tiles:not(.tiles-2) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .main.fill { height: auto; }
+  .main.fill:has(> .panel) { padding-right: var(--space-6); }
+  .stage { flex: none; height: 70vh; }
+  .panel { position: static; width: auto; border: var(--border-1) solid var(--stroke); }
 }
 @media (max-width: 480px) {
   .tiles:not(.tiles-2) { grid-template-columns: repeat(2, minmax(0, 1fr)); }

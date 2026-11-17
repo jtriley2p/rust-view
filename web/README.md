@@ -15,5 +15,6 @@ per line) loads too.
 
 - `src/report.ts`: report types, validation, merging.
 - `src/overview.tsx`: the overview screen.
+- `src/dependencies.tsx`: the external dependencies screen, a layered graph laid out by `elkjs`.
 - `flint/`: the Flint design system's runtime files (tokens, fonts, component bundle). Styles in `src/app.css` use its
   tokens only.

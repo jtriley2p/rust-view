@@ -1,6 +1,6 @@
 // Types and loading for the CLI's report (crates/core/spec/report.schema.json).
 
-export const VERSION = 2
+export const VERSION = 3
 
 /** Every count at zero: the shape reports are checked against and the seed for sums. */
 export const ZERO = {
@@ -24,7 +24,22 @@ export type Dependency = {
   kind: 'normal' | 'dev' | 'build'
   source: 'registry' | 'path' | 'git'
 }
-export type Crate = { name: string; path: string; totals: Totals; dependencies: Dependency[]; files: File[] }
+/** A node of a crate's resolved dependency graph; `dependencies` name other packages of the same crate. */
+export type Package = {
+  name: string
+  version: string
+  source: Dependency['source']
+  dependencies: { name: string; version: string; kind: Dependency['kind'] }[]
+}
+export type Crate = {
+  name: string
+  version: string
+  path: string
+  totals: Totals
+  dependencies: Dependency[]
+  packages: Package[]
+  files: File[]
+}
 
 export type LoadError =
   | { kind: 'read'; file: string }
@@ -59,6 +74,8 @@ const mismatch = (v: unknown, shape: object, at: string): string | null => {
 
 const { files: _, ...FILE_ZERO } = ZERO
 
+const versioned = (v: unknown) => isObject(v) && typeof v.name === 'string' && typeof v.version === 'string'
+
 /** The crates of one parsed report, or the first place it departs from the schema. */
 const crates = (file: string, report: unknown): Crate[] | LoadError => {
   if (!isObject(report)) return { kind: 'shape', file, at: 'the top level' }
@@ -66,14 +83,18 @@ const crates = (file: string, report: unknown): Crate[] | LoadError => {
   if (!Array.isArray(report.crates)) return { kind: 'shape', file, at: 'crates' }
   for (const [i, c] of report.crates.entries()) {
     const at = `crates[${i}]`
-    if (!isObject(c) || typeof c.name !== 'string' || typeof c.path !== 'string') return { kind: 'shape', file, at }
-    if (!Array.isArray(c.files) || !Array.isArray(c.dependencies)) return { kind: 'shape', file, at }
-    const bad = mismatch(c.totals, ZERO, `${at}.totals`) ?? c.files
-      .map((f, j) => {
-        const here = `${at}.files[${j}]`
-        return isObject(f) && typeof f.path === 'string' && typeof f.module === 'string' ? mismatch(f, FILE_ZERO, here) : here
-      })
-      .find(Boolean)
+    if (!isObject(c) || !versioned(c) || typeof c.path !== 'string') return { kind: 'shape', file, at }
+    if (!Array.isArray(c.files) || !Array.isArray(c.dependencies) || !Array.isArray(c.packages)) return { kind: 'shape', file, at }
+    const bad = mismatch(c.totals, ZERO, `${at}.totals`)
+      ?? c.files
+        .map((f, j) => {
+          const here = `${at}.files[${j}]`
+          return isObject(f) && typeof f.path === 'string' && typeof f.module === 'string' ? mismatch(f, FILE_ZERO, here) : here
+        })
+        .find(Boolean)
+      ?? c.packages
+        .map((p, j) => (versioned(p) && Array.isArray(p.dependencies) && p.dependencies.every(versioned) ? null : `${at}.packages[${j}]`))
+        .find(Boolean)
     if (bad) return { kind: 'shape', file, at: bad }
   }
   return report.crates as Crate[]

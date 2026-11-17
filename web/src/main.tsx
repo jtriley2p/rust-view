@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import example from '../../crates/core/spec/example.json'
+import { Dependencies } from './dependencies'
 import { Button } from './flint'
 import { Overview } from './overview'
 import { type Loaded, describe, load } from './report'
@@ -87,7 +88,7 @@ function App() {
           />
         </div>
       </nav>
-      <main className="main">
+      <main className={screen.id === 'dependencies' ? 'main fill' : 'main'}>
         <h1 className="title">{screen.label}</h1>
         {errors.length > 0 && (
           <ul className="errors small" role="alert">
@@ -109,6 +110,8 @@ function App() {
           </div>
         ) : screen.id === 'overview' ? (
           <Overview crates={crates} />
+        ) : screen.id === 'dependencies' ? (
+          <Dependencies crates={crates} />
         ) : (
           <p className="body muted">This screen is not built yet.</p>
         )}
