@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "totals": {
     "files": 7,
     "lines": { "code": 342, "test": 138, "doc": 31, "comment": 19, "blank": 82 },
@@ -15,6 +15,7 @@
   "crates": [
     {
       "name": "kv-core",
+      "version": "0.1.0",
       "path": "crates/core",
       "totals": {
         "files": 5,
@@ -32,6 +33,49 @@
         { "name": "serde", "req": "1", "kind": "normal", "source": "registry" },
         { "name": "thiserror", "req": "2", "kind": "normal", "source": "registry" },
         { "name": "tempfile", "req": "3", "kind": "dev", "source": "registry" }
+      ],
+      "packages": [
+        { "name": "fastrand", "version": "2.4.1", "source": "registry", "dependencies": [] },
+        { "name": "kv-core", "version": "0.1.0", "source": "path", "dependencies": [
+          { "name": "serde", "version": "1.0.229", "kind": "normal" },
+          { "name": "thiserror", "version": "2.0.18", "kind": "normal" },
+          { "name": "tempfile", "version": "3.27.0", "kind": "dev" }
+        ] },
+        { "name": "once_cell", "version": "1.21.4", "source": "registry", "dependencies": [] },
+        { "name": "proc-macro2", "version": "1.0.107", "source": "registry", "dependencies": [
+          { "name": "unicode-ident", "version": "1.0.27", "kind": "normal" }
+        ] },
+        { "name": "quote", "version": "1.0.47", "source": "registry", "dependencies": [
+          { "name": "proc-macro2", "version": "1.0.107", "kind": "normal" }
+        ] },
+        { "name": "serde", "version": "1.0.229", "source": "registry", "dependencies": [
+          { "name": "serde_core", "version": "1.0.229", "kind": "normal" },
+          { "name": "serde_derive", "version": "1.0.229", "kind": "normal" }
+        ] },
+        { "name": "serde_core", "version": "1.0.229", "source": "registry", "dependencies": [] },
+        { "name": "serde_derive", "version": "1.0.229", "source": "registry", "dependencies": [
+          { "name": "proc-macro2", "version": "1.0.107", "kind": "normal" },
+          { "name": "quote", "version": "1.0.47", "kind": "normal" },
+          { "name": "syn", "version": "3.0.10", "kind": "normal" }
+        ] },
+        { "name": "syn", "version": "3.0.10", "source": "registry", "dependencies": [
+          { "name": "proc-macro2", "version": "1.0.107", "kind": "normal" },
+          { "name": "quote", "version": "1.0.47", "kind": "normal" },
+          { "name": "unicode-ident", "version": "1.0.27", "kind": "normal" }
+        ] },
+        { "name": "tempfile", "version": "3.27.0", "source": "registry", "dependencies": [
+          { "name": "fastrand", "version": "2.4.1", "kind": "normal" },
+          { "name": "once_cell", "version": "1.21.4", "kind": "normal" }
+        ] },
+        { "name": "thiserror", "version": "2.0.18", "source": "registry", "dependencies": [
+          { "name": "thiserror-impl", "version": "2.0.18", "kind": "normal" }
+        ] },
+        { "name": "thiserror-impl", "version": "2.0.18", "source": "registry", "dependencies": [
+          { "name": "proc-macro2", "version": "1.0.107", "kind": "normal" },
+          { "name": "quote", "version": "1.0.47", "kind": "normal" },
+          { "name": "syn", "version": "3.0.10", "kind": "normal" }
+        ] },
+        { "name": "unicode-ident", "version": "1.0.27", "source": "registry", "dependencies": [] }
       ],
       "files": [
         {
@@ -151,6 +195,7 @@
     },
     {
       "name": "kv-cli",
+      "version": "0.1.0",
       "path": "crates/cli",
       "totals": {
         "files": 2,
@@ -168,6 +213,79 @@
         { "name": "kv-core", "req": null, "kind": "normal", "source": "path" },
         { "name": "clap", "req": "4", "kind": "normal", "source": "registry" },
         { "name": "anyhow", "req": "1", "kind": "normal", "source": "registry" }
+      ],
+      "packages": [
+        { "name": "anstyle", "version": "1.0.14", "source": "registry", "dependencies": [] },
+        { "name": "anyhow", "version": "1.0.103", "source": "registry", "dependencies": [] },
+        { "name": "clap", "version": "4.6.2", "source": "registry", "dependencies": [
+          { "name": "clap_builder", "version": "4.6.2", "kind": "normal" },
+          { "name": "clap_derive", "version": "4.6.2", "kind": "normal" }
+        ] },
+        { "name": "clap_builder", "version": "4.6.2", "source": "registry", "dependencies": [
+          { "name": "anstyle", "version": "1.0.14", "kind": "normal" },
+          { "name": "clap_lex", "version": "1.1.0", "kind": "normal" },
+          { "name": "strsim", "version": "0.11.1", "kind": "normal" }
+        ] },
+        { "name": "clap_derive", "version": "4.6.2", "source": "registry", "dependencies": [
+          { "name": "heck", "version": "0.5.0", "kind": "normal" },
+          { "name": "proc-macro2", "version": "1.0.107", "kind": "normal" },
+          { "name": "quote", "version": "1.0.47", "kind": "normal" },
+          { "name": "syn", "version": "2.0.119", "kind": "normal" }
+        ] },
+        { "name": "clap_lex", "version": "1.1.0", "source": "registry", "dependencies": [] },
+        { "name": "fastrand", "version": "2.4.1", "source": "registry", "dependencies": [] },
+        { "name": "heck", "version": "0.5.0", "source": "registry", "dependencies": [] },
+        { "name": "kv-cli", "version": "0.1.0", "source": "path", "dependencies": [
+          { "name": "kv-core", "version": "0.1.0", "kind": "normal" },
+          { "name": "clap", "version": "4.6.2", "kind": "normal" },
+          { "name": "anyhow", "version": "1.0.103", "kind": "normal" }
+        ] },
+        { "name": "kv-core", "version": "0.1.0", "source": "path", "dependencies": [
+          { "name": "serde", "version": "1.0.229", "kind": "normal" },
+          { "name": "thiserror", "version": "2.0.18", "kind": "normal" },
+          { "name": "tempfile", "version": "3.27.0", "kind": "dev" }
+        ] },
+        { "name": "once_cell", "version": "1.21.4", "source": "registry", "dependencies": [] },
+        { "name": "proc-macro2", "version": "1.0.107", "source": "registry", "dependencies": [
+          { "name": "unicode-ident", "version": "1.0.27", "kind": "normal" }
+        ] },
+        { "name": "quote", "version": "1.0.47", "source": "registry", "dependencies": [
+          { "name": "proc-macro2", "version": "1.0.107", "kind": "normal" }
+        ] },
+        { "name": "serde", "version": "1.0.229", "source": "registry", "dependencies": [
+          { "name": "serde_core", "version": "1.0.229", "kind": "normal" },
+          { "name": "serde_derive", "version": "1.0.229", "kind": "normal" }
+        ] },
+        { "name": "serde_core", "version": "1.0.229", "source": "registry", "dependencies": [] },
+        { "name": "serde_derive", "version": "1.0.229", "source": "registry", "dependencies": [
+          { "name": "proc-macro2", "version": "1.0.107", "kind": "normal" },
+          { "name": "quote", "version": "1.0.47", "kind": "normal" },
+          { "name": "syn", "version": "3.0.10", "kind": "normal" }
+        ] },
+        { "name": "strsim", "version": "0.11.1", "source": "registry", "dependencies": [] },
+        { "name": "syn", "version": "2.0.119", "source": "registry", "dependencies": [
+          { "name": "proc-macro2", "version": "1.0.107", "kind": "normal" },
+          { "name": "quote", "version": "1.0.47", "kind": "normal" },
+          { "name": "unicode-ident", "version": "1.0.27", "kind": "normal" }
+        ] },
+        { "name": "syn", "version": "3.0.10", "source": "registry", "dependencies": [
+          { "name": "proc-macro2", "version": "1.0.107", "kind": "normal" },
+          { "name": "quote", "version": "1.0.47", "kind": "normal" },
+          { "name": "unicode-ident", "version": "1.0.27", "kind": "normal" }
+        ] },
+        { "name": "tempfile", "version": "3.27.0", "source": "registry", "dependencies": [
+          { "name": "fastrand", "version": "2.4.1", "kind": "normal" },
+          { "name": "once_cell", "version": "1.21.4", "kind": "normal" }
+        ] },
+        { "name": "thiserror", "version": "2.0.18", "source": "registry", "dependencies": [
+          { "name": "thiserror-impl", "version": "2.0.18", "kind": "normal" }
+        ] },
+        { "name": "thiserror-impl", "version": "2.0.18", "source": "registry", "dependencies": [
+          { "name": "proc-macro2", "version": "1.0.107", "kind": "normal" },
+          { "name": "quote", "version": "1.0.47", "kind": "normal" },
+          { "name": "syn", "version": "3.0.10", "kind": "normal" }
+        ] },
+        { "name": "unicode-ident", "version": "1.0.27", "source": "registry", "dependencies": [] }
       ],
       "files": [
         {

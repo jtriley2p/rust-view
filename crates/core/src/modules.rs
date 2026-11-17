@@ -114,8 +114,10 @@ mod tests {
     fn tree(path: &str, roots: &[&str], files: &[(&str, &str)]) -> (Tree, Vec<Error>) {
         let krate = CrateInput {
             name: "k".into(),
+            version: "0.1.0".into(),
             path: path.into(),
             dependencies: vec![],
+            packages: vec![],
             roots: roots.iter().map(|r| r.to_string()).collect(),
             files: files
                 .iter()

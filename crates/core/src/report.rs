@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::ops::AddAssign;
 
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Report {
@@ -15,9 +15,11 @@ pub struct Report {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Crate {
     pub name: String,
+    pub version: String,
     pub path: String,
     pub totals: Totals,
     pub dependencies: Vec<Dependency>,
+    pub packages: Vec<Package>,
     pub files: Vec<File>,
 }
 
@@ -27,6 +29,23 @@ pub struct Dependency {
     pub req: Option<String>,
     pub kind: DepKind,
     pub source: DepSource,
+}
+
+/// A node of a crate's resolved dependency graph.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Package {
+    pub name: String,
+    pub version: String,
+    pub source: DepSource,
+    pub dependencies: Vec<PackageDep>,
+}
+
+/// An edge to the package with this name and version.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PackageDep {
+    pub name: String,
+    pub version: String,
+    pub kind: DepKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

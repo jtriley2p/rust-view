@@ -8,7 +8,7 @@ mod scan;
 
 pub use report::Report;
 
-use report::{Crate, Dependency, File, Metrics, Totals};
+use report::{Crate, Dependency, File, Metrics, Package, Totals};
 use std::collections::HashMap;
 use std::fmt;
 
@@ -16,9 +16,12 @@ use std::fmt;
 #[derive(Debug, Clone)]
 pub struct CrateInput {
     pub name: String,
+    pub version: String,
     /// Package directory; `.` for a root package.
     pub path: String,
     pub dependencies: Vec<Dependency>,
+    /// Resolved dependency graph: the crate and all it transitively depends on. Empty if unresolved.
+    pub packages: Vec<Package>,
     /// Root file of each target: `src/lib.rs`, `src/main.rs`, `tests/*.rs`, ..
     pub roots: Vec<String>,
     pub files: Vec<Source>,
@@ -126,9 +129,11 @@ pub fn analyze(crates: &[CrateInput]) -> Analysis {
         report.totals += totals;
         report.crates.push(Crate {
             name: krate.name.clone(),
+            version: krate.version.clone(),
             path: krate.path.clone(),
             totals,
             dependencies: krate.dependencies.clone(),
+            packages: krate.packages.clone(),
             files,
         });
     }

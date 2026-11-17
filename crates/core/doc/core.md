@@ -9,7 +9,8 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
 
 - Core is pure: no filesystem, no process spawning, no manifest parsing.
 - `analyze(&[CrateInput]) -> Analysis { report, errors }`.
-- The CLI supplies source text, target roots, and dependencies (from `cargo metadata`).
+- The CLI supplies source text, target roots, declared dependencies, and the resolved package
+  graph (from `cargo metadata`). Core passes the last two through untouched.
 - `analyze` never fails. Bad input is skipped and listed in `errors`
   (`Parse`, `MissingModule`, `Orphan`); errors are not part of the JSON.
 
@@ -18,7 +19,11 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
 - Shape: `report -> crates[] -> files[]`, with `totals` on the report and on each crate.
 - Per file: `lines`, `tests`, `items`, `functional`, `suppressions`, `error_handling`,
   `imports`, `reexports`.
-- Per crate: `dependencies` (name, req, kind, source).
+- Per crate: `version`, `dependencies` (declared: name, req, kind, source), and `packages`
+  (resolved: the crate plus everything it transitively depends on, each with name, version,
+  source, and edges by name, version, and kind).
+- Each report carries its crate's whole closure, so one report draws a full graph; consumers
+  merge packages across reports by name and version.
 - Counts only: no line locations, no per-name breakdowns.
 - Totals sum the per-file counts, plus a `files` count. Imports and re-exports are not totalled.
 - Unknown keys are rejected; any shape change bumps `version`.
@@ -61,6 +66,11 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
   record of the inline module they are exported from.
 - **A binary importing its own library** (`use my_pkg::x` in `main.rs`) is treated as external.
 - **A file shared by two targets** is attributed to the first root that reaches it.
+- **`packages` is as cargo resolves it**: every platform's dependencies, default features of
+  the workspace, and dev-dependencies of workspace members only (so a path dependency brings its
+  dev-dependencies along). It is empty when resolution fails, e.g. offline with a cold cache.
+- **Packages are keyed by name and version.** The same name and version from two sources
+  (a registry crate patched by a git fork) collapse into one.
 - **syn is 3.x.**
 - **`jsonschema` is a heavy dev-dependency**; the library itself depends only on `syn`,
   `proc-macro2`, and `serde`.

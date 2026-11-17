@@ -277,8 +277,10 @@ mod tests {
         };
         let analysis = analyze(&[CrateInput {
             name: "k".into(),
+            version: "0.1.0".into(),
             path: ".".into(),
             dependencies: vec![],
+            packages: vec![],
             roots: vec!["src/lib.rs".into()],
             files: vec![
                 source("src/lib.rs", "wrap! { mod a; } pub use a::{A, B, Built};"),
@@ -313,8 +315,10 @@ mod tests {
         };
         let analysis = analyze(&[CrateInput {
             name: "k".into(),
+            version: "0.1.0".into(),
             path: ".".into(),
             dependencies: vec![],
+            packages: vec![],
             roots: vec!["src/lib.rs".into()],
             files: vec![
                 source("src/lib.rs", LIB),

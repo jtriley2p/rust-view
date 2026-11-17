@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["version", "totals", "crates"],
   "properties": {
-    "version": { "description": "Schema version. Bumped on any breaking change.", "const": 2 },
+    "version": { "description": "Schema version. Bumped on any breaking change.", "const": 3 },
     "totals": { "description": "Sum over all crates.", "$ref": "#/$defs/totals" },
     "crates": { "type": "array", "items": { "$ref": "#/$defs/crate" } }
   },
@@ -15,12 +15,18 @@
     "crate": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "path", "totals", "dependencies", "files"],
+      "required": ["name", "version", "path", "totals", "dependencies", "packages", "files"],
       "properties": {
         "name": { "description": "Package name from Cargo.toml.", "type": "string" },
+        "version": { "description": "Package version from Cargo.toml.", "type": "string" },
         "path": { "description": "Package directory; `.` for a root package.", "type": "string" },
         "totals": { "description": "Sum over `files`.", "$ref": "#/$defs/totals" },
         "dependencies": { "type": "array", "items": { "$ref": "#/$defs/dependency" } },
+        "packages": {
+          "description": "Resolved dependency graph: the crate itself and every package it transitively depends on, sorted by name then version. Empty if the dependencies could not be resolved.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/package" }
+        },
         "files": { "type": "array", "items": { "$ref": "#/$defs/file" } }
       }
     },
@@ -34,6 +40,31 @@
         "req": { "description": "Version requirement as written (workspace-inherited values resolved); null if none.", "type": ["string", "null"] },
         "kind": { "enum": ["normal", "dev", "build"] },
         "source": { "enum": ["registry", "path", "git"] }
+      }
+    },
+    "package": {
+      "description": "A resolved package, identified by `name` and `version`.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "source", "dependencies"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "description": "Resolved version.", "type": "string" },
+        "source": { "enum": ["registry", "path", "git"] },
+        "dependencies": {
+          "description": "Resolved dependencies, one entry per package and kind. Each names another entry in `packages`. Only workspace members have `dev` entries.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "version", "kind"],
+            "properties": {
+              "name": { "type": "string" },
+              "version": { "type": "string" },
+              "kind": { "enum": ["normal", "dev", "build"] }
+            }
+          }
+        }
       }
     },
     "totals": {

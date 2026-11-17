@@ -148,10 +148,30 @@ fn analyzes_a_crate() {
         kind: DepKind::Normal,
         source: DepSource::Registry,
     }];
+    let packages = vec![
+        Package {
+            name: "kv-core".into(),
+            version: "0.1.0".into(),
+            source: DepSource::Path,
+            dependencies: vec![PackageDep {
+                name: "serde".into(),
+                version: "1.0.229".into(),
+                kind: DepKind::Normal,
+            }],
+        },
+        Package {
+            name: "serde".into(),
+            version: "1.0.229".into(),
+            source: DepSource::Registry,
+            dependencies: vec![],
+        },
+    ];
     let analysis = analyze(&[CrateInput {
         name: "kv-core".into(),
+        version: "0.1.0".into(),
         path: "crates/core".into(),
         dependencies: dependencies.clone(),
+        packages: packages.clone(),
         roots: vec![
             "crates/core/src/lib.rs".into(),
             "crates/core/tests/roundtrip.rs".into(),
@@ -175,6 +195,10 @@ fn analyzes_a_crate() {
 
     let krate = &report.crates[0];
     assert_eq!(krate.dependencies, dependencies);
+    assert_eq!(
+        (krate.version.as_str(), &krate.packages),
+        ("0.1.0", &packages)
+    );
     let [error, lib, store, wal, roundtrip] = &krate.files[..] else {
         panic!("{:#?}", krate.files)
     };
