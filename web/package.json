@@ -1,0 +1,19 @@
+{
+  "name": "rust-view-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun ./index.html",
+    "build": "bun build ./index.html --outdir dist --production",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "18",
+    "react-dom": "18"
+  },
+  "devDependencies": {
+    "@types/react": "18",
+    "@types/react-dom": "18",
+    "typescript": "^7.0.2"
+  }
+}

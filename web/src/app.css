@@ -1,0 +1,128 @@
+/* App layout. Every value is a Flint token; components come from flint/components/bundle.css. */
+
+/* ---------- shell ---------- */
+.shell { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
+
+.side {
+  position: sticky;
+  top: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--surface-raised);
+  border-right: var(--border-1) solid var(--stroke);
+}
+.side-name { padding: var(--space-4); }
+.side-item {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 var(--space-4) 0 calc(var(--space-4) - var(--border-2));
+  border-left: var(--border-2) solid transparent;
+  font: 500 14px/20px var(--font-sans);
+  color: var(--ink-muted);
+  text-decoration: none;
+  transition: background-color var(--duration-ui) var(--ease-continuous), border-color var(--duration-ui) var(--ease-continuous), color var(--duration-ui) var(--ease-continuous);
+}
+.side-item:hover { color: var(--ink); background: var(--tint-hover); }
+.side-item[aria-current] { color: var(--ink); background: var(--tint-active); border-left-color: var(--stroke-bright); }
+.side-item:focus-visible { outline: var(--border-2) solid var(--focus); outline-offset: calc(-1 * var(--border-2)); }
+.side-foot {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding: var(--space-4);
+  border-top: var(--border-1) solid var(--stroke-subtle);
+  color: var(--ink-subtle);
+}
+
+.main {
+  box-sizing: border-box;
+  display: grid;
+  align-content: start;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: 1280px;
+  padding: var(--space-8) var(--space-6) var(--space-12);
+}
+.main > * { margin: 0; min-width: 0; }
+
+.muted { color: var(--ink-muted); }
+.row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.empty { display: grid; gap: var(--space-4); max-width: 560px; color: var(--ink-muted); }
+.empty p { margin: 0; }
+.empty .code { color: var(--ink); }
+.errors { display: grid; gap: var(--space-1); padding: 0; list-style: none; color: var(--danger); }
+
+/* ---------- overview ---------- */
+.tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-4); margin: 0; }
+.tiles-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.tiles-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tile { min-width: 0; }
+.tile dt { display: flex; align-items: center; gap: var(--space-2); color: var(--ink-subtle); }
+.tile dd { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-2); margin: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
+.tile dd .code { color: var(--ink-muted); }
+.tile dd.zero, .mods td.zero { color: var(--ink-subtle); }
+
+/* the kind tiles above it are the chart's legend */
+.share { margin-top: var(--space-6); }
+/* Flint's screen-reader table keeps its content size despite width and height: 1px; pinned to its chart's
+   bottom right, it grows up and left and can't make the page wider or taller than the shell */
+.fl-chart-sr { right: 0; bottom: 0; }
+
+/* stat cards pair up while each keeps 240px, the least its tile labels fit in; the chart sits beside them when both fit */
+.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 504px), 1fr)); gap: var(--space-6); }
+.quad { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(240px, 50% - var(--space-3))), 1fr)); gap: var(--space-6); }
+
+/* per-module table: bleeds to the card's edges so row rules span it */
+.fl-card-body > .mods { margin: calc(-1 * var(--space-4)); overflow-x: auto; }
+.mods table { width: 100%; border-collapse: collapse; }
+.mods th, .mods td {
+  padding: var(--space-2) var(--space-3);
+  font: 400 13px/20px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.mods th:first-child { width: 100%; padding-left: var(--space-4); text-align: left; }
+.mods :is(th, td):last-child { padding-right: var(--space-4); }
+.mods thead th { color: var(--ink-subtle); }
+.mods tbody tr { border-top: var(--border-1) solid var(--stroke-subtle); }
+.mods tbody tr:hover { background: var(--tint-hover); }
+.mods tr.crate > * { font-weight: 600; }
+.mods tbody tr:not(.crate) th { padding-left: var(--space-8); }
+.mods .path { margin-left: var(--space-2); font-weight: 400; color: var(--ink-subtle); }
+
+.sort, .fold {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-none);
+  color: var(--ink-subtle);
+  cursor: pointer;
+  transition: color var(--duration-ui) var(--ease-continuous);
+}
+.sort:hover, [aria-sort] > .sort { color: var(--ink); }
+.fold { font: inherit; color: inherit; }
+.fold .mark { display: inline-block; width: var(--space-4); color: var(--ink-subtle); }
+.fold:hover .mark { color: var(--ink); }
+:is(.sort, .fold):focus-visible { outline: var(--border-2) solid var(--focus); outline-offset: 2px; }
+
+.ratio { flex-direction: row; width: 160px; height: 8px; margin-left: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .side-item, .sort, .fold { transition: none; }
+}
+
+@media (max-width: 900px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; height: auto; border-right: 0; border-bottom: var(--border-1) solid var(--stroke); }
+  .tiles:not(.tiles-2) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .tiles:not(.tiles-2) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
