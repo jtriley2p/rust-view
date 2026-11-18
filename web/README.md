@@ -17,7 +17,11 @@ per line) loads too.
 - `src/overview.tsx`: the overview screen.
 - `src/items.tsx`: the module items screen: a module tree where a module opens to list its items. Focusing an item
   draws arrows from it to the modules that import it and on from those that re-export it.
+- `src/flow.tsx`: the type flow screen: the report's flows as a graph of types and the functions between them, sliced
+  to what is within a few hops of one node and boxed by module. An arrow's colour and head give how a type is taken or
+  given (move, read, mutate, convert); a dashed arrow ends at an error, and bars across one mark a channel. Selecting
+  a node centres the slice on it.
 - `src/dependencies.tsx`: the external dependencies screen, a layered graph laid out by `elkjs`.
-- `src/canvas.tsx`: the zooming, panning SVG canvas both of those draw in.
+- `src/canvas.tsx`: the zooming, panning SVG canvas those three draw in.
 - `flint/`: the Flint design system's runtime files (tokens, fonts, component bundle). Styles in `src/app.css` use its
   tokens only.

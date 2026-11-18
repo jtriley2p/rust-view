@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import example from '../../crates/core/spec/example.json'
 import { Dependencies } from './dependencies'
 import { Button } from './flint'
+import { Flow } from './flow'
 import { Items } from './items'
 import { Overview } from './overview'
 import { type Loaded, describe, load } from './report'
@@ -10,6 +11,7 @@ import { type Loaded, describe, load } from './report'
 const SCREENS = [
   { id: 'overview', label: 'Overview' },
   { id: 'items', label: 'Module items' },
+  { id: 'flow', label: 'Type flow' },
   { id: 'dependencies', label: 'External dependencies' },
 ] as const
 type Screen = (typeof SCREENS)[number]
@@ -113,6 +115,8 @@ function App() {
           <Overview crates={crates} />
         ) : screen.id === 'dependencies' ? (
           <Dependencies crates={crates} />
+        ) : screen.id === 'flow' ? (
+          <Flow crates={crates} />
         ) : (
           <Items crates={crates} />
         )}

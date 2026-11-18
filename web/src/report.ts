@@ -1,6 +1,6 @@
 // Types and loading for the CLI's report (crates/core/spec/report.schema.json).
 
-export const VERSION = 4
+export const VERSION = 6
 
 /** Every count at zero: the shape reports are checked against and the seed for sums. */
 export const ZERO = {
@@ -23,8 +23,19 @@ export type Kind = (typeof KINDS)[number]
 export type Definition = { name: string; kind: Kind; module: string; public: boolean }
 /** Names the file takes from another module of its target. `*` is a glob. */
 export type Import = { module: string; file: string; names: string[] }
-/** A `pub use` name. The first hop of `trace` is where it is taken from; `file` is null outside the crate. */
-export type Reexport = { name: string; trace: { module: string; file: string | null; name: string }[] }
+/** A name in a module; `file` is null outside the crate. */
+export type Place = { module: string; file: string | null; name: string }
+/** A `pub use` name. The first hop of `trace` is where it is taken from. */
+export type Reexport = { name: string; trace: Place[] }
+export const MODES = ['move', 'read', 'mut'] as const
+export type Mode = (typeof MODES)[number]
+/** A type a flow takes or gives, and how: by value, by `&`, or by `&mut`. */
+export type Port = { type: Place; by: Mode; error: boolean; channel: boolean }
+/**
+ * A fn, a conversion impl, or a field holding a channel end, and the types whose values pass through it.
+ * A `mut` input is changed in place, so values pass into it too.
+ */
+export type Flow = { name: string; module: string; kind: 'fn' | 'convert' | 'field'; inputs: Port[]; outputs: Port[] }
 export type File = Omit<Totals, 'files'> & {
   path: string
   module: string
@@ -33,6 +44,7 @@ export type File = Omit<Totals, 'files'> & {
   definitions: Definition[]
   imports: Import[]
   reexports: Reexport[]
+  flows: Flow[]
 }
 export type Dependency = {
   name: string
@@ -92,12 +104,15 @@ const { files: _, ...FILE_ZERO } = ZERO
 
 const strings = (v: Json, ...keys: string[]) => keys.every(k => typeof v[k] === 'string')
 const each = (v: unknown, ok: (x: Json) => boolean) => Array.isArray(v) && v.every(x => isObject(x) && ok(x))
+const place = (v: unknown) => isObject(v) && strings(v, 'module', 'name')
+const port = (v: Json) => place(v.type) && strings(v, 'by') && typeof v.error === 'boolean' && typeof v.channel === 'boolean'
 const named = (f: unknown): f is Json =>
   isObject(f)
   && strings(f, 'path', 'module', 'root')
   && each(f.definitions, d => strings(d, 'name', 'kind', 'module') && typeof d.public === 'boolean')
   && each(f.imports, i => strings(i, 'module', 'file') && Array.isArray(i.names))
-  && each(f.reexports, r => strings(r, 'name') && each(r.trace, h => strings(h, 'module', 'name')))
+  && each(f.reexports, r => strings(r, 'name') && each(r.trace, place))
+  && each(f.flows, x => strings(x, 'name', 'module', 'kind') && each(x.inputs, port) && each(x.outputs, port))
 
 const versioned = (v: unknown) => isObject(v) && typeof v.name === 'string' && typeof v.version === 'string'
 

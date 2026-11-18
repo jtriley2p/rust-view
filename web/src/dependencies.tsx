@@ -6,7 +6,7 @@ import type { Crate } from './report'
 
 const elk = new ELK()
 
-const DIRECTIONS = [
+export const DIRECTIONS = [
   { id: 'RIGHT', label: 'Left to right' },
   { id: 'DOWN', label: 'Top down' },
 ] as const
@@ -81,7 +81,7 @@ const read = (out: ElkNode, curved: boolean): Layout => ({
   ),
 })
 
-function Choice<T extends string>({ legend, options, value, onChange }: {
+export function Choice<T extends string>({ legend, options, value, onChange }: {
   legend: string
   options: readonly { id: T; label: string }[]
   value: T

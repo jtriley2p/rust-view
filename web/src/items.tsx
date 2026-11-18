@@ -121,7 +121,7 @@ function Switch({ label, checked, onChange }: { label: string; checked: boolean;
 }
 
 /** What makes an SVG group a button: a press, or Enter or Space, runs `act`. */
-const press = (act: () => void) => ({
+export const press = (act: () => void) => ({
   role: 'button',
   tabIndex: 0,
   onClick: (e: MouseEvent) => {
