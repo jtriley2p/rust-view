@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["version", "totals", "crates"],
   "properties": {
-    "version": { "description": "Schema version. Bumped on any breaking change.", "const": 4 },
+    "version": { "description": "Schema version. Bumped on any breaking change.", "const": 6 },
     "totals": { "description": "Sum over all crates.", "$ref": "#/$defs/totals" },
     "crates": { "type": "array", "items": { "$ref": "#/$defs/crate" } }
   },
@@ -87,10 +87,10 @@
       "additionalProperties": false,
       "required": [
         "path", "module", "root", "lines", "tests", "items", "functional",
-        "suppressions", "error_handling", "definitions", "imports", "reexports"
+        "suppressions", "error_handling", "definitions", "imports", "reexports", "flows"
       ],
       "properties": {
-        "path": { "description": "Unique across the report; the key that `root` and the `file` fields in `imports` and `reexports` refer to.", "type": "string" },
+        "path": { "description": "Unique across the report; the key that `root` and the `file` fields in `imports`, `reexports`, and `flows` refer to.", "type": "string" },
         "module": { "description": "Module path of the file within its target, rooted at `crate`.", "type": "string" },
         "root": { "description": "`path` of the root file of the target the file belongs to. Module paths are unique within a target, not within a crate.", "type": "string" },
         "lines": { "$ref": "#/$defs/lines" },
@@ -101,7 +101,8 @@
         "error_handling": { "$ref": "#/$defs/error_handling" },
         "definitions": { "description": "Named items in source order. Empty for a test file.", "type": "array", "items": { "$ref": "#/$defs/definition" } },
         "imports": { "type": "array", "items": { "$ref": "#/$defs/import" } },
-        "reexports": { "type": "array", "items": { "$ref": "#/$defs/reexport" } }
+        "reexports": { "type": "array", "items": { "$ref": "#/$defs/reexport" } },
+        "flows": { "description": "Data flow through the file's fns and conversion impls, in source order, then through the channel ends its types' fields hold. Empty for a test file.", "type": "array", "items": { "$ref": "#/$defs/flow" } }
       }
     },
     "lines": {
@@ -228,12 +229,45 @@
         }
       }
     },
+    "flow": {
+      "description": "A fn, a conversion impl, or a field holding a channel end, and the types whose values pass through it. A fn or method outside fn bodies is listed if its signature names a type; a `From`, `TryFrom`, or `Into` impl if both its ends do. A type is a struct, enum, or union of the crate, or a type outside it named through a `use` or a qualified path; primitives, prelude types, and type parameters are left out. Aliases are expanded. `Result`, `Option`, `Vec`, `Box`, `Rc`, `Arc`, `Pin`, `Poll`, references, pointers, slices, arrays, and tuples stand for the types inside them, as `Receiver<T>` does for `T`.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "module", "kind", "inputs", "outputs"],
+      "properties": {
+        "name": { "description": "The fn, as `Type::method` for a method; the trait for a conversion impl; `Type.field` for a field, with the variant between them in an enum. Not unique: two impls can give a type the same method.", "type": "string" },
+        "module": { "description": "The file's module, extended by any inline modules around the flow.", "type": "string" },
+        "kind": {
+          "description": "`fn`: a fn or method. `convert`: a conversion impl, from its source to its target. `field`: a field holding a `Sender<T>`, from its type to `T`, or a `Receiver<T>`, from `T` to its type.",
+          "enum": ["fn", "convert", "field"]
+        },
+        "inputs": { "description": "The types of the parameters. One taken by `&mut` is changed in place, so values pass into it too.", "type": "array", "items": { "$ref": "#/$defs/port" } },
+        "outputs": { "description": "The types given back, and for each `Sender<T>` parameter, `T`. A `Sender<T>` given back is left out.", "type": "array", "items": { "$ref": "#/$defs/port" } }
+      }
+    },
+    "port": {
+      "description": "A type a flow takes or gives. Unique within its list.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "by", "error", "channel"],
+      "properties": {
+        "type": { "description": "The type, at its definition.", "$ref": "#/$defs/hop" },
+        "by": {
+          "description": "How the type is taken or given, set by the nearest reference around it. `move`: by value. `read`: by `&`. `mut`: by `&mut`. What crosses a channel is a `move`.",
+          "enum": ["move", "read", "mut"]
+        },
+        "error": { "description": "The type is the error of a `Result`, or `TryFrom`'s `Error`.", "type": "boolean" },
+        "channel": { "description": "The values cross a channel: the type was inside a `Sender` or `Receiver`.", "type": "boolean" }
+      }
+    },
+
     "hop": {
+      "description": "A name in a module: a step of a re-export's trace, or the type of a flow's port.",
       "type": "object",
       "additionalProperties": false,
       "required": ["module", "file", "name"],
       "properties": {
-        "module": { "description": "Absolute path of the module the name is taken from.", "type": "string" },
+        "module": { "description": "Absolute path of the module holding the name; outside the crate, the path as written.", "type": "string" },
         "file": { "description": "`path` of the file defining that module; null if outside the crate.", "type": ["string", "null"] },
         "name": { "description": "Name of the item within that module.", "type": "string" }
       }

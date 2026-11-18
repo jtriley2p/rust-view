@@ -73,6 +73,88 @@ pub struct Scan {
     pub mods: Vec<Mod>,
     pub uses: Vec<Use>,
     pub defs: Vec<Def>,
+    pub sigs: Vec<Sig>,
+    pub fields: Vec<Field>,
+    pub aliases: Vec<Alias>,
+}
+
+/// A type as written, reduced to the paths it names. Pointers, slices, and arrays stand for the
+/// type inside them.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Ty {
+    /// `a::B<C, D>`, with the type arguments of its last segment.
+    Path { path: Vec<String>, args: Vec<Ty> },
+    /// `&T`, or `&mut T` if `mutable`.
+    Ref { mutable: bool, to: Box<Ty> },
+    /// A tuple's types; empty for a type that names none (`impl Trait`, `dyn Trait`, `fn()`, ..).
+    Group(Vec<Ty>),
+}
+
+impl Ty {
+    fn of(ty: &syn::Type) -> Ty {
+        match ty {
+            syn::Type::Path(p) if p.qself.is_none() => Ty::Path {
+                path: p
+                    .path
+                    .segments
+                    .iter()
+                    .map(|s| s.ident.to_string())
+                    .collect(),
+                args: p.path.segments.last().map(type_args).unwrap_or_default(),
+            },
+            syn::Type::Reference(t) => Ty::Ref {
+                mutable: t.mutability.is_some(),
+                to: Box::new(Ty::of(&t.elem)),
+            },
+            syn::Type::Ptr(t) => Ty::of(&t.elem),
+            syn::Type::Slice(t) => Ty::of(&t.elem),
+            syn::Type::Array(t) => Ty::of(&t.elem),
+            syn::Type::Paren(t) => Ty::of(&t.elem),
+            syn::Type::Group(t) => Ty::of(&t.elem),
+            syn::Type::Tuple(t) => Ty::Group(t.elems.iter().map(Ty::of).collect()),
+            _ => Ty::Group(Vec::new()),
+        }
+    }
+}
+
+/// A fn, method, or conversion impl outside fn bodies: the types it takes and gives back.
+/// `scope` as in [`Def`].
+#[derive(Debug)]
+pub struct Sig {
+    pub scope: Vec<String>,
+    /// `Type::method` for a method; the trait for a conversion impl.
+    pub name: String,
+    /// Type parameters in scope; they name no type.
+    pub generics: Vec<String>,
+    /// The `impl`'s type.
+    pub this: Option<Ty>,
+    /// The parameters; a conversion's source.
+    pub inputs: Vec<Ty>,
+    /// A `From`, `TryFrom`, or `Into` impl.
+    pub conversion: bool,
+    pub output: Option<Ty>,
+    /// `TryFrom`'s `Error`.
+    pub error: Option<Ty>,
+}
+
+/// A field of a struct, union, or enum variant outside fn bodies.
+#[derive(Debug)]
+pub struct Field {
+    pub scope: Vec<String>,
+    pub owner: String,
+    /// The field's name or position, after its variant's name in an enum: `Variant.field`.
+    pub name: String,
+    pub generics: Vec<String>,
+    pub ty: Ty,
+}
+
+/// A `type` alias outside fn bodies.
+#[derive(Debug)]
+pub struct Alias {
+    pub scope: Vec<String>,
+    pub name: String,
+    pub generics: Vec<String>,
+    pub ty: Ty,
 }
 
 /// A named item. `scope` is the chain of inline modules enclosing it.
@@ -113,6 +195,8 @@ pub struct Use {
     pub name: String,
     /// Has a visibility modifier, so it re-exports.
     pub public: bool,
+    /// A `use` declaration, which brings `name` into scope.
+    pub declared: bool,
 }
 
 pub fn scan(text: &str) -> syn::Result<Scan> {
@@ -146,22 +230,32 @@ struct Visitor {
     blocks: u32,
     /// Line ranges of test code.
     tests: Vec<(usize, usize)>,
+    /// The `impl` around the current node.
+    this: Option<Impl>,
+}
+
+struct Impl {
+    ty: Ty,
+    generics: Vec<String>,
+    /// `From`, `TryFrom`, or `Into`: the impl is the flow, so its methods are not.
+    conversion: bool,
 }
 
 impl Visitor {
     /// Runs `f` over test code: only its test counts and `mod` declarations are kept.
     fn test_region(&mut self, lines: (usize, usize), f: impl FnOnce(&mut Self)) {
         let outer = std::mem::take(&mut self.out.metrics);
-        let (uses, defs, mods) = (
-            self.out.uses.len(),
-            self.out.defs.len(),
-            self.out.mods.len(),
-        );
+        let o = &self.out;
+        let (uses, defs, mods) = (o.uses.len(), o.defs.len(), o.mods.len());
+        let (sigs, fields, aliases) = (o.sigs.len(), o.fields.len(), o.aliases.len());
         f(self);
         let inner = std::mem::replace(&mut self.out.metrics, outer);
         self.out.metrics.tests += inner.tests;
         self.out.uses.truncate(uses);
         self.out.defs.truncate(defs);
+        self.out.sigs.truncate(sigs);
+        self.out.fields.truncate(fields);
+        self.out.aliases.truncate(aliases);
         self.out.mods[mods..].iter_mut().for_each(|m| m.test = true);
         self.tests.push(lines);
     }
@@ -216,7 +310,72 @@ impl Visitor {
         }
         // `const _` names nothing.
         self.def(name.to_string(), (name != "_").then_some(kind), public);
+        if self.blocks == 0 {
+            self.shape(item);
+        }
         visit::visit_item(self, item)
+    }
+
+    /// Records a type's fields, or an alias's target.
+    fn shape(&mut self, item: &Item) {
+        // `prefix` is `Variant.` in an enum.
+        let mut fields = |owner: &syn::Ident, generics, prefix: &str, fields: &syn::Fields| {
+            for (n, f) in fields.iter().enumerate() {
+                let name = f.ident.as_ref().map_or(n.to_string(), |i| i.to_string());
+                self.out.fields.push(Field {
+                    scope: self.scope.clone(),
+                    owner: owner.to_string(),
+                    name: format!("{prefix}{name}"),
+                    generics: type_params(generics),
+                    ty: Ty::of(&f.ty),
+                });
+            }
+        };
+        match item {
+            Item::Struct(i) => fields(&i.ident, &i.generics, "", &i.fields),
+            Item::Union(i) => {
+                let named = syn::Fields::Named(i.fields.clone());
+                fields(&i.ident, &i.generics, "", &named)
+            }
+            Item::Enum(i) => i
+                .variants
+                .iter()
+                .for_each(|v| fields(&i.ident, &i.generics, &format!("{}.", v.ident), &v.fields)),
+            Item::Type(i) => self.out.aliases.push(Alias {
+                scope: self.scope.clone(),
+                name: i.ident.to_string(),
+                generics: type_params(&i.generics),
+                ty: Ty::of(&i.ty),
+            }),
+            _ => {}
+        }
+    }
+
+    /// Records a fn's signature; a method's is read against the `impl` around it.
+    fn sig(&mut self, sig: &syn::Signature, method: bool) {
+        let this = self.this.as_ref().filter(|_| method);
+        if self.blocks > 0 || this.is_some_and(|i| i.conversion) {
+            return;
+        }
+        let mut name = sig.ident.to_string();
+        if let Some(Ty::Path { path, .. }) = this.map(|i| &i.ty) {
+            name = format!("{}::{name}", path.last().map_or("", String::as_str));
+        }
+        let mut generics = this.map(|i| i.generics.clone()).unwrap_or_default();
+        generics.extend(type_params(&sig.generics));
+        self.out.sigs.push(Sig {
+            scope: self.scope.clone(),
+            name,
+            generics,
+            this: this.map(|i| i.ty.clone()),
+            inputs: sig.inputs.iter().map(input).collect(),
+            conversion: false,
+            output: match &sig.output {
+                syn::ReturnType::Type(_, ty) => Some(Ty::of(ty)),
+                syn::ReturnType::Default => None,
+            },
+            error: None,
+        });
     }
 
     fn def(&mut self, name: String, kind: Option<ItemKind>, public: bool) {
@@ -307,6 +466,7 @@ impl Visitor {
             path,
             name,
             public,
+            declared: true,
         });
     }
 }
@@ -359,7 +519,56 @@ impl<'ast> Visit<'ast> for Visitor {
             return self.test_region(line_range(i), |v| visit::visit_impl_item_fn(v, i));
         }
         self.out.metrics.items.method += 1;
+        self.sig(&i.sig, true);
         visit::visit_impl_item_fn(self, i);
+    }
+
+    fn visit_item_fn(&mut self, i: &'ast syn::ItemFn) {
+        self.sig(&i.sig, false);
+        visit::visit_item_fn(self, i);
+    }
+
+    fn visit_item_impl(&mut self, i: &'ast syn::ItemImpl) {
+        let ty = Ty::of(&i.self_ty);
+        let generics = type_params(&i.generics);
+        // `From<A>`: the trait, and the type it converts with.
+        let conversion = i.trait_.as_ref().and_then(|(path, _)| {
+            let last = path.segments.last()?;
+            let name = last.ident.to_string();
+            let with = type_args(last).into_iter().next()?;
+            matches!(name.as_str(), "From" | "TryFrom" | "Into").then_some((name, with))
+        });
+        let outer = self.this.replace(Impl {
+            ty: ty.clone(),
+            generics: generics.clone(),
+            conversion: conversion.is_some(),
+        });
+        if let Some((name, with)) = conversion
+            && self.blocks == 0
+        {
+            let error = i.items.iter().find_map(|item| match item {
+                syn::ImplItem::Type(t) if name == "TryFrom" && t.ident == "Error" => {
+                    Some(Ty::of(&t.ty))
+                }
+                _ => None,
+            });
+            let (from, to) = match name.as_str() {
+                "Into" => (ty.clone(), with),
+                _ => (with, ty.clone()),
+            };
+            self.out.sigs.push(Sig {
+                scope: self.scope.clone(),
+                name,
+                generics,
+                this: Some(ty),
+                inputs: vec![from],
+                conversion: true,
+                output: Some(to),
+                error,
+            });
+        }
+        visit::visit_item_impl(self, i);
+        self.this = outer;
     }
 
     fn visit_trait_item_fn(&mut self, i: &'ast syn::TraitItemFn) {
@@ -432,6 +641,7 @@ impl<'ast> Visit<'ast> for Visitor {
                 path,
                 name,
                 public: false,
+                declared: false,
             });
         }
         visit::visit_path(self, i);
@@ -455,6 +665,44 @@ impl<'ast> Visit<'ast> for TakesFn {
             name.as_deref(),
             Some("Fn" | "FnMut" | "FnOnce" | "AsyncFn" | "AsyncFnMut" | "AsyncFnOnce")
         );
+    }
+}
+
+/// The type arguments of a path segment: `A` and `B` in `Map<A, B>`.
+fn type_args(segment: &syn::PathSegment) -> Vec<Ty> {
+    let syn::PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return Vec::new();
+    };
+    let types = args.args.iter().filter_map(|a| match a {
+        syn::GenericArgument::Type(ty) => Some(Ty::of(ty)),
+        _ => None,
+    });
+    types.collect()
+}
+
+fn type_params(generics: &syn::Generics) -> Vec<String> {
+    generics
+        .type_params()
+        .map(|p| p.ident.to_string())
+        .collect()
+}
+
+/// A parameter's type; `&self` is `&Self`.
+fn input(arg: &syn::FnArg) -> Ty {
+    let this = Ty::Path {
+        path: vec!["Self".to_string()],
+        args: Vec::new(),
+    };
+    match arg {
+        syn::FnArg::Receiver(r) => match &r.kind {
+            syn::ReceiverKind::Reference(_, _, mutable) => Ty::Ref {
+                mutable: mutable.is_some(),
+                to: Box::new(this),
+            },
+            syn::ReceiverKind::Typed(_, ty) => Ty::of(ty),
+            _ => this,
+        },
+        syn::FnArg::Typed(p) => Ty::of(&p.ty),
     }
 }
 

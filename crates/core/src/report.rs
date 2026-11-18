@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::ops::AddAssign;
 
-pub const VERSION: u32 = 4;
+pub const VERSION: u32 = 6;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Report {
@@ -82,6 +82,7 @@ pub struct File {
     pub definitions: Vec<Definition>,
     pub imports: Vec<Import>,
     pub reexports: Vec<Reexport>,
+    pub flows: Vec<Flow>,
 }
 
 /// A named item other than a `mod`.
@@ -128,6 +129,52 @@ pub struct Hop {
     pub module: String,
     pub file: Option<String>,
     pub name: String,
+}
+
+/// A fn, a conversion impl, or a field holding a channel end, and the types whose values pass
+/// through it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Flow {
+    /// The fn (`Type::method` for a method), the conversion trait, or `Type.field`.
+    pub name: String,
+    /// The file's module, extended by any inline modules around the flow.
+    pub module: String,
+    pub kind: FlowKind,
+    pub inputs: Vec<Port>,
+    pub outputs: Vec<Port>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FlowKind {
+    Fn,
+    /// A `From`, `TryFrom`, or `Into` impl.
+    Convert,
+    Field,
+}
+
+/// A type a flow takes or gives.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Port {
+    #[serde(rename = "type")]
+    pub ty: Hop,
+    pub by: Mode,
+    /// The error of a `Result`.
+    pub error: bool,
+    /// The values cross a channel.
+    pub channel: bool,
+}
+
+/// How a port's type is taken or given.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Mode {
+    /// By value.
+    Move,
+    /// By `&`.
+    Read,
+    /// By `&mut`: the fn changes it in place.
+    Mut,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

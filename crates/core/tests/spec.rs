@@ -247,7 +247,8 @@ fn analyzes_a_crate() {
                     "trace": [{ "module": "crate::store", "file": "crates/core/src/store.rs", "name": "Store" }],
                     "end": "definition"
                 }
-            ]
+            ],
+            "flows": []
         })
     );
     assert_eq!(lib.module, "crate");
@@ -328,6 +329,56 @@ fn analyzes_a_crate() {
         definitions,
         [("Store", ItemKind::Struct, "crate::store", true)]
     );
+
+    let flows = |f: &File| -> Vec<String> {
+        let ports = |ports: &[Port]| -> String {
+            let port = |p: &Port| {
+                let error = if p.error { " (error)" } else { "" };
+                format!("{} {:?}{error}", p.ty.name, p.by)
+            };
+            ports.iter().map(port).collect::<Vec<_>>().join(", ")
+        };
+        let line = |f: &Flow| format!("{}: {} > {}", f.name, ports(&f.inputs), ports(&f.outputs));
+        f.flows.iter().map(line).collect()
+    };
+    assert_eq!(
+        json["crates"][0]["files"][0]["flows"],
+        json!([{
+            "name": "From",
+            "module": "crate::error",
+            "kind": "convert",
+            "inputs": [{
+                "type": { "module": "std::io", "file": null, "name": "Error" },
+                "by": "move",
+                "error": false,
+                "channel": false
+            }],
+            "outputs": [{
+                "type": { "module": "crate::error", "file": "crates/core/src/error.rs", "name": "Error" },
+                "by": "move",
+                "error": false,
+                "channel": false
+            }]
+        }])
+    );
+    assert_eq!(
+        flows(store),
+        [
+            "Store::get: Store Read > Entry Read",
+            "Store::put: Store Mut > Error Move (error)",
+            "Store::each: Store Read > ",
+        ]
+    );
+    assert_eq!(
+        flows(wal),
+        [
+            "Wal::entries: Wal Read > Entry Read",
+            "Wal::append: Wal Mut > Error Move (error)",
+            "Wal::compact: Wal Mut > ",
+            "Wal::first: Wal Read > Entry Read",
+        ]
+    );
+    assert!(lib.flows.is_empty() && roundtrip.flows.is_empty());
 
     assert_eq!(
         wal.metrics.suppressions,

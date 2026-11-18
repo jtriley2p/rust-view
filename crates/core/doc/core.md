@@ -18,7 +18,7 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
 
 - Shape: `report -> crates[] -> files[]`, with `totals` on the report and on each crate.
 - Per file: `root`, `lines`, `tests`, `items`, `functional`, `suppressions`, `error_handling`,
-  `definitions`, `imports`, `reexports`.
+  `definitions`, `imports`, `reexports`, `flows`.
 - `root` names the file's target. Module paths repeat across a crate's targets (each has its own
   `crate`), so consumers key modules by root and module.
 - Per crate: `version`, `dependencies` (declared: name, req, kind, source), and `packages`
@@ -27,9 +27,12 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
 - Each report carries its crate's whole closure, so one report draws a full graph; consumers
   merge packages across reports by name and version.
 - Counts, plus names where a consumer needs them to connect things (`definitions`, `imports`,
-  `reexports`). No line locations.
-- Totals sum the per-file counts, plus a `files` count. Definitions, imports, and re-exports are
-  not totalled.
+  `reexports`, `flows`). No line locations.
+- A flow is one fn, conversion impl, or channel-holding field, with the types it takes and
+  gives. Consumers draw fns as nodes between types and slice the graph; the rules below stay
+  in core.
+- Totals sum the per-file counts, plus a `files` count. Definitions, imports, re-exports, and
+  flows are not totalled.
 - Unknown keys are rejected; any shape change bumps `version`.
 - Dropped: test coverage, dead item count.
 
@@ -56,6 +59,26 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
   list; failing that, its brace groups that hold items are visited and each name after an item
   keyword is recorded as a definition. Any other call is parsed as an expression list or skipped.
 - **Combinators** are matched by method name.
+- **Flows**: each fn and method outside fn bodies whose signature names a type is one flow:
+  its parameters' types are `inputs`, its return's `outputs`. Each is marked by how it is taken
+  or given, set by the nearest reference around it: `move`, `read` (`&`), `mut` (`&mut`). A
+  `&mut` input is changed in place, so consumers walk it both ways. A trait's own methods give
+  none; its impls do.
+- **Flow types**: a struct, enum, or union of the crate, or an outside type named through a
+  `use` or a qualified path, kept as written (`std::io::Error`). A bare name nothing brings
+  into scope (primitive, prelude type, type parameter) is no type. Aliases are expanded where
+  they are defined, 8 deep.
+- **Wrappers** stand for the types inside them: `Result`, `Option`, `Vec`, `Box`, `Rc`, `Arc`,
+  `Pin`, `Poll`, references, pointers, slices, arrays, tuples. A `Result`'s second type is
+  flagged `error`. Matched by name, unless the crate defines a type of that name.
+- **Conversions**: `impl From<A> for B`, `TryFrom`, and `Into` are flows of kind `convert`
+  from `A` to `B`, with `TryFrom`'s `Error` as an error, kept if both ends name a type. The
+  methods of those impls give nothing more. Consumers draw one as an edge between its types.
+- **Channels**: `Receiver<T>` stands for `T`. `Sender<T>` as a parameter makes `T` an output;
+  given back, it gives nothing. A field holding a sender is a flow of kind `field` from its
+  type (`read`) to `T`, one holding a receiver from `T` to its type; no other field gives a
+  flow. All are flagged `channel` and taken by `move`, so the two sides of a channel meet at
+  `T`.
 
 ## Worth knowing
 
@@ -69,6 +92,18 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
   recorded; re-exports of them end as `unresolved` (most of libc's 222).
 - **Combinator matching is fuzzy.** `take` and `last` are left out to avoid `Option::take` and
   slice `last`; false positives such as `str::find` remain.
+- **Flows are signatures only.** What a body does is not read: a channel made and used inside
+  one fn, a struct literal, an inferred type. `impl Trait`, `dyn Trait`, closures, fn pointers,
+  and associated types (`Self::Item`) name no type.
+- **A flow does not say which input reaches which output.** Every input of a fn is taken to
+  reach every output.
+- **Flow names are not unique.** Two impls can give a type the same method (`PartialEq<A>` and
+  `PartialEq<B>`), and `cfg` can keep two fns of one name; consumers merge them.
+- **Outside types are not wrappers unless listed.** `Mutex<T>`, `HashMap<K, V>`, and the like
+  are nodes of their own and hide their arguments. A workspace sibling's type is an outside
+  type, named by the path used to reach it, so one type can appear under two paths.
+- **Shared outside types are hubs.** `std::task::Context` and `std::fmt::Formatter` are taken
+  by `&mut` in many signatures; consumers should not walk on through outside types.
 - **Orphans are common.** Fixture files (e.g. trybuild's `tests/ui/*.rs`) are reported as
   `Orphan`; the CLI should treat them as warnings.
 - **`public` is the modifier, not reachability.** A `pub` item in a private module is `public`.
@@ -90,6 +125,8 @@ The output format is specified by `spec/report.schema.json`; `spec/example.json`
 - **Spec**: add a `module` field to re-exports to keep inline-module scope.
 - **Resolution**: resolve a binary's imports of its own library; record `extern` block items as
   definitions.
+- **Flows**: name a workspace sibling's type by its definition, so the graphs of two reports
+  join; read a trait's own method signatures.
 - **Macro expansion**, if revisited: have the CLI run `cargo rustc -- -Zunpretty=expanded`
   (nightly, needs a successful build, one cfg set) and pass the text into core as data, scanned
   for definitions only. A `macro_rules!` interpreter in core would stay pure but miss dependency

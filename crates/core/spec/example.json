@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 6,
   "totals": {
     "files": 7,
     "lines": { "code": 342, "test": 138, "doc": 31, "comment": 19, "blank": 82 },
@@ -122,7 +122,8 @@
               "trace": [{ "module": "serde", "file": null, "name": "Serialize" }],
               "end": "external"
             }
-          ]
+          ],
+          "flows": []
         },
         {
           "path": "crates/core/src/error.rs",
@@ -141,7 +142,18 @@
             { "name": "Error", "kind": "enum", "module": "crate::error", "public": true }
           ],
           "imports": [],
-          "reexports": []
+          "reexports": [],
+          "flows": [
+            {
+              "name": "From", "module": "crate::error", "kind": "convert",
+              "inputs": [
+                { "type": { "module": "std::io", "file": null, "name": "Error" }, "by": "move", "error": false, "channel": false }
+              ],
+              "outputs": [
+                { "type": { "module": "crate::error", "file": "crates/core/src/error.rs", "name": "Error" }, "by": "move", "error": false, "channel": false }
+              ]
+            }
+          ]
         },
         {
           "path": "crates/core/src/store.rs",
@@ -174,6 +186,73 @@
               "trace": [{ "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Entry" }],
               "end": "definition"
             }
+          ],
+          "flows": [
+            {
+              "name": "open", "module": "crate::store", "kind": "fn",
+              "inputs": [
+                { "type": { "module": "std::path", "file": null, "name": "Path" }, "by": "read", "error": false, "channel": false }
+              ],
+              "outputs": [
+                { "type": { "module": "crate::store", "file": "crates/core/src/store.rs", "name": "Store" }, "by": "move", "error": false, "channel": false },
+                { "type": { "module": "crate::error", "file": "crates/core/src/error.rs", "name": "Error" }, "by": "move", "error": true, "channel": false }
+              ]
+            },
+            {
+              "name": "Store::get", "module": "crate::store", "kind": "fn",
+              "inputs": [
+                { "type": { "module": "crate::store", "file": "crates/core/src/store.rs", "name": "Store" }, "by": "read", "error": false, "channel": false }
+              ],
+              "outputs": [
+                { "type": { "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Entry" }, "by": "read", "error": false, "channel": false }
+              ]
+            },
+            {
+              "name": "Store::put", "module": "crate::store", "kind": "fn",
+              "inputs": [
+                { "type": { "module": "crate::store", "file": "crates/core/src/store.rs", "name": "Store" }, "by": "mut", "error": false, "channel": false },
+                { "type": { "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Entry" }, "by": "move", "error": false, "channel": false }
+              ],
+              "outputs": [
+                { "type": { "module": "crate::error", "file": "crates/core/src/error.rs", "name": "Error" }, "by": "move", "error": true, "channel": false }
+              ]
+            },
+            {
+              "name": "Store::snapshot", "module": "crate::store", "kind": "fn",
+              "inputs": [
+                { "type": { "module": "crate::store", "file": "crates/core/src/store.rs", "name": "Store" }, "by": "read", "error": false, "channel": false }
+              ],
+              "outputs": [
+                { "type": { "module": "crate::store", "file": "crates/core/src/store.rs", "name": "Snapshot" }, "by": "move", "error": false, "channel": false }
+              ]
+            },
+            {
+              "name": "Store::watch", "module": "crate::store", "kind": "fn",
+              "inputs": [
+                { "type": { "module": "crate::store", "file": "crates/core/src/store.rs", "name": "Store" }, "by": "read", "error": false, "channel": false }
+              ],
+              "outputs": [
+                { "type": { "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Entry" }, "by": "move", "error": false, "channel": true }
+              ]
+            },
+            {
+              "name": "Snapshot::entries", "module": "crate::store", "kind": "fn",
+              "inputs": [
+                { "type": { "module": "crate::store", "file": "crates/core/src/store.rs", "name": "Snapshot" }, "by": "read", "error": false, "channel": false }
+              ],
+              "outputs": [
+                { "type": { "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Entry" }, "by": "read", "error": false, "channel": false }
+              ]
+            },
+            {
+              "name": "Store.changes", "module": "crate::store", "kind": "field",
+              "inputs": [
+                { "type": { "module": "crate::store", "file": "crates/core/src/store.rs", "name": "Store" }, "by": "read", "error": false, "channel": false }
+              ],
+              "outputs": [
+                { "type": { "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Entry" }, "by": "move", "error": false, "channel": true }
+              ]
+            }
           ]
         },
         {
@@ -199,7 +278,45 @@
           "imports": [
             { "module": "crate::error", "file": "crates/core/src/error.rs", "names": ["Error"] }
           ],
-          "reexports": []
+          "reexports": [],
+          "flows": [
+            {
+              "name": "Wal::append", "module": "crate::wal", "kind": "fn",
+              "inputs": [
+                { "type": { "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Wal" }, "by": "mut", "error": false, "channel": false },
+                { "type": { "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Entry" }, "by": "read", "error": false, "channel": false }
+              ],
+              "outputs": [
+                { "type": { "module": "crate::error", "file": "crates/core/src/error.rs", "name": "Error" }, "by": "move", "error": true, "channel": false }
+              ]
+            },
+            {
+              "name": "Wal::replay", "module": "crate::wal", "kind": "fn",
+              "inputs": [
+                { "type": { "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Wal" }, "by": "read", "error": false, "channel": false }
+              ],
+              "outputs": [
+                { "type": { "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Entry" }, "by": "move", "error": false, "channel": false },
+                { "type": { "module": "crate::error", "file": "crates/core/src/error.rs", "name": "Error" }, "by": "move", "error": true, "channel": false }
+              ]
+            },
+            {
+              "name": "Wal::compact", "module": "crate::wal", "kind": "fn",
+              "inputs": [
+                { "type": { "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Wal" }, "by": "mut", "error": false, "channel": false }
+              ],
+              "outputs": []
+            },
+            {
+              "name": "From", "module": "crate::wal", "kind": "convert",
+              "inputs": [
+                { "type": { "module": "crate::store", "file": "crates/core/src/store.rs", "name": "Snapshot" }, "by": "move", "error": false, "channel": false }
+              ],
+              "outputs": [
+                { "type": { "module": "crate::wal", "file": "crates/core/src/wal.rs", "name": "Wal" }, "by": "move", "error": false, "channel": false }
+              ]
+            }
+          ]
         },
         {
           "path": "crates/core/tests/roundtrip.rs",
@@ -216,7 +333,8 @@
           "error_handling": { "unwrap": 0, "expect": 0, "panic": 0, "propagate": 0 },
           "definitions": [],
           "imports": [],
-          "reexports": []
+          "reexports": [],
+          "flows": []
         }
       ]
     },
@@ -336,7 +454,19 @@
           "imports": [
             { "module": "crate::args", "file": "crates/cli/src/args.rs", "names": ["Args", "Command"] }
           ],
-          "reexports": []
+          "reexports": [],
+          "flows": [
+            {
+              "name": "run", "module": "crate", "kind": "fn",
+              "inputs": [
+                { "type": { "module": "crate::args", "file": "crates/cli/src/args.rs", "name": "Args" }, "by": "move", "error": false, "channel": false }
+              ],
+              "outputs": [
+                { "type": { "module": "kv_core", "file": null, "name": "Entry" }, "by": "move", "error": false, "channel": false },
+                { "type": { "module": "kv_core", "file": null, "name": "Error" }, "by": "move", "error": true, "channel": false }
+              ]
+            }
+          ]
         },
         {
           "path": "crates/cli/src/args.rs",
@@ -356,7 +486,18 @@
             { "name": "Command", "kind": "enum", "module": "crate::args", "public": true }
           ],
           "imports": [],
-          "reexports": []
+          "reexports": [],
+          "flows": [
+            {
+              "name": "Args::command", "module": "crate::args", "kind": "fn",
+              "inputs": [
+                { "type": { "module": "crate::args", "file": "crates/cli/src/args.rs", "name": "Args" }, "by": "read", "error": false, "channel": false }
+              ],
+              "outputs": [
+                { "type": { "module": "crate::args", "file": "crates/cli/src/args.rs", "name": "Command" }, "by": "move", "error": false, "channel": false }
+              ]
+            }
+          ]
         }
       ]
     }

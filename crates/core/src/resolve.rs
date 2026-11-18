@@ -1,8 +1,8 @@
 //! Import edges and re-export traces.
 
 use crate::modules::{Place, Tree, scoped};
-use crate::report::{End, Hop, Import, Reexport};
-use crate::scan::{Scan, Use};
+use crate::report::{End, Hop, Import, ItemKind, Reexport};
+use crate::scan::{Alias, Scan, Use};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// What each non-test module defines and re-exports.
@@ -15,6 +15,20 @@ pub struct Index<'a> {
 struct Module<'a> {
     defs: HashSet<&'a str>,
     pubs: Vec<&'a Use>,
+    /// `use` declarations, private ones included.
+    uses: Vec<&'a Use>,
+    /// Structs, enums, and unions.
+    types: HashSet<&'a str>,
+    aliases: HashMap<&'a str, &'a Alias>,
+}
+
+/// What a type path names.
+pub enum Named<'a> {
+    /// A struct, enum, or union of the crate.
+    Type(Hop),
+    /// A `type` alias, and the module defining it.
+    Alias(String, &'a Alias),
+    External(Hop),
 }
 
 impl<'a> Index<'a> {
@@ -28,9 +42,20 @@ impl<'a> Index<'a> {
             for d in &scan.defs {
                 let module = modules.entry(key(&d.scope)).or_default();
                 module.defs.insert(&d.name);
+                if let Some(ItemKind::Struct | ItemKind::Enum | ItemKind::Union) = d.kind {
+                    module.types.insert(&d.name);
+                }
             }
-            for u in scan.uses.iter().filter(|u| u.public) {
-                modules.entry(key(&u.scope)).or_default().pubs.push(u);
+            for u in scan.uses.iter().filter(|u| u.declared) {
+                let module = modules.entry(key(&u.scope)).or_default();
+                module.uses.push(u);
+                if u.public {
+                    module.pubs.push(u);
+                }
+            }
+            for a in &scan.aliases {
+                let module = modules.entry(key(&a.scope)).or_default();
+                module.aliases.insert(&a.name, a);
             }
         }
         Index { tree, modules }
@@ -79,11 +104,73 @@ impl<'a> Index<'a> {
             .collect()
     }
 
-    fn trace(&self, root: usize, from: &str, u: &Use) -> (Vec<Hop>, End) {
-        let mut trace = Vec::new();
-        let Some(mut hop) = self.hop(root, from, u) else {
-            return (vec![external(u)], End::External);
+    /// The type `path` names where it is written in module `from`. None for a name nothing in
+    /// the crate brings into scope: a primitive, a prelude type, a type parameter.
+    pub fn named(&self, root: usize, from: &str, path: &[String]) -> Option<Named<'a>> {
+        let here = self.modules.get(&(root, from.to_string()));
+        let (first, name) = (path.first()?, path.last()?);
+        let mut full = path.to_vec();
+        let mut globbed = None;
+        let local = matches!(first.as_str(), "crate" | "self" | "super")
+            || here.is_some_and(|m| m.defs.contains(first.as_str()));
+        if !local {
+            let uses = here.map(|m| &m.uses[..]).unwrap_or_default();
+            if let Some(u) = uses.iter().find(|u| u.name == *first) {
+                full.splice(..1, u.path.iter().cloned());
+            } else if path.len() == 1 {
+                // Only a glob can bring the name in.
+                let globs = uses.iter().filter(|u| u.name == "*");
+                let mut hops = globs.filter_map(|u| self.hop(root, from, u));
+                let hop =
+                    hops.find(|h| h.name == "*" && self.provides(root, &h.module, name, 8))?;
+                globbed = Some(Hop {
+                    name: name.clone(),
+                    ..hop
+                });
+            }
+        }
+        // A lone segment from outside is a crate, not a type.
+        let lone = full.len() == 1;
+        let (trace, end) = match globbed {
+            Some(hop) => self.follow(root, hop),
+            None => {
+                let named = Use {
+                    scope: Vec::new(),
+                    name: name.clone(),
+                    path: full,
+                    public: false,
+                    declared: false,
+                };
+                self.trace(root, from, &named)
+            }
         };
+        let hop = trace.into_iter().last()?;
+        match end {
+            End::Definition => {
+                let module = self.modules.get(&(root, hop.module.clone()))?;
+                match module.aliases.get(hop.name.as_str()) {
+                    Some(alias) => Some(Named::Alias(hop.module, alias)),
+                    None => module
+                        .types
+                        .contains(hop.name.as_str())
+                        .then_some(Named::Type(hop)),
+                }
+            }
+            End::External => (!lone).then_some(Named::External(hop)),
+            End::Unresolved => None,
+        }
+    }
+
+    fn trace(&self, root: usize, from: &str, u: &Use) -> (Vec<Hop>, End) {
+        match self.hop(root, from, u) {
+            Some(hop) => self.follow(root, hop),
+            None => (vec![external(u)], End::External),
+        }
+    }
+
+    /// Follows `hop` through re-exports to its definition.
+    fn follow(&self, root: usize, mut hop: Hop) -> (Vec<Hop>, End) {
+        let mut trace = Vec::new();
         loop {
             if trace.contains(&hop) {
                 return (trace, End::Unresolved);

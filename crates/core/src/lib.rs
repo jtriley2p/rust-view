@@ -1,5 +1,6 @@
 //! Static metrics for Rust source. Pure: takes source text, returns a [`Report`].
 
+mod flow;
 mod lines;
 mod modules;
 pub mod report;
@@ -104,8 +105,8 @@ pub fn analyze(crates: &[CrateInput]) -> Analysis {
                 continue;
             };
             let mut metrics = scan.metrics;
-            let (mut definitions, mut imports, mut reexports) =
-                (Vec::new(), Vec::new(), Vec::new());
+            let (mut definitions, mut imports, mut reexports, mut flows) =
+                (Vec::new(), Vec::new(), Vec::new(), Vec::new());
             if place.test {
                 // The whole file is test code.
                 metrics = Metrics {
@@ -129,6 +130,7 @@ pub fn analyze(crates: &[CrateInput]) -> Analysis {
                     .collect();
                 imports = index.imports(&f.path, place, scan);
                 reexports = index.reexports(place, scan);
+                flows = flow::flows(&index, &f.path, place, scan);
             }
             totals += Totals { files: 1, metrics };
             files.push(File {
@@ -139,6 +141,7 @@ pub fn analyze(crates: &[CrateInput]) -> Analysis {
                 definitions,
                 imports,
                 reexports,
+                flows,
             });
         }
         report.totals += totals;
