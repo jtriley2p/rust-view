@@ -93,3 +93,23 @@ fn bad_project_fails() {
     assert_eq!(output.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&output.stderr).starts_with("error: "));
 }
+
+#[test]
+fn input_flag_targets_paths() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_rust-view"))
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap()
+    };
+    let output = run(&["-i", "../core", "--input", "Cargo.toml"]);
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let reports: Vec<Report> = stdout
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(names(&reports), ["rust-view-core", "rust-view-cli"]);
+    assert_eq!(run(&["-i"]).status.code(), Some(2));
+}

@@ -10,13 +10,14 @@ use std::process::{Command, ExitCode};
 use std::{env, fmt, fs, io};
 
 const USAGE: &str = "\
-usage: rust-view [-o DIR] [PATH]...
+usage: rust-view [-i PATH]... [-o DIR] [PATH]...
 
 Writes one JSON report per crate: one for a single crate, one per member for a workspace.
 PATH is a cargo project directory or its Cargo.toml (default: .).
 
-  -o, --out DIR  write DIR/<crate>.json instead of one report per line on stdout
-  -h, --help     print this help
+  -i, --input PATH  report on PATH; repeatable, same as a bare PATH
+  -o, --out DIR     write DIR/<crate>.json instead of one report per line on stdout
+  -h, --help        print this help
 ";
 
 #[derive(Debug)]
@@ -123,6 +124,13 @@ fn main() -> ExitCode {
                 print!("{USAGE}");
                 return ExitCode::SUCCESS;
             }
+            Some("-i" | "--input") => match args.next() {
+                Some(path) => {
+                    paths.push(PathBuf::from(path));
+                    continue;
+                }
+                None => Error::Usage("-i needs a path".into()),
+            },
             Some("-o" | "--out") => match args.next() {
                 Some(dir) => {
                     out = Some(PathBuf::from(dir));
