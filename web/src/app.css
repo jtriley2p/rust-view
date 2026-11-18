@@ -298,8 +298,11 @@
 
 /* ---------- type flow ---------- */
 /* a function is level with the stage and quieter than the types it joins */
-.flow .node.fn:not(.focus) > rect { fill: var(--surface); }
-.flow .node.fn:not(.focus) text { fill: var(--ink-muted); }
+.flow .node.fn:not(.focus, .pinned) > rect { fill: var(--surface); }
+.flow .node.fn:not(.focus, .pinned) text { fill: var(--ink-muted); }
+/* a pinned node steps up the ladder, short of the focus, and carries a mark in its corner */
+.flow .node.pinned:not(.focus) > rect { fill: var(--surface-overlay); stroke: var(--stroke-strong); }
+.flow .node .mark { fill: var(--ink-muted); }
 .flow .fl-g-label { dominant-baseline: central; user-select: none; }
 
 .panel .fl-field { justify-self: stretch; }

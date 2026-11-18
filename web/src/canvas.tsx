@@ -6,17 +6,21 @@ const ZOOM = { min: 0.1, max: 2, step: 1.25 }
 /** Pointer travel in px before a press pans the canvas instead of clicking. */
 const SLOP = 4
 
+type Point = { x: number; y: number }
+
 /**
  * An SVG drawing that zooms and pans, with its zoom buttons; it fills a `.stage`.
  * `onClear` is a press on the background, or Escape.
  */
-export function Canvas({ width, height, className, label, start = 'fit', onClear, children }: {
+export function Canvas({ width, height, className, label, start = 'fit', hold, onClear, children }: {
   width: number
   height: number
   className: string
   label: string
   /** The zoom to open at. */
   start?: number | 'fit'
+  /** A drawing point kept where it is on screen while the drawing around it changes. */
+  hold?: Point | undefined
   onClear: () => void
   children: ReactNode
 }) {
@@ -47,17 +51,33 @@ export function Canvas({ width, height, className, label, start = 'fit', onClear
   }
   /** Zooms to `next`, holding still the drawing point under canvas point (x, y); the centre by default. */
   const zoomTo = (next: number, x = view.width / 2, y = view.height / 2) => {
-    const from = offset()
+    const [from, to] = [offset(), Math.min(ZOOM.max, Math.max(Math.min(ZOOM.min, fit), next))]
+    // An unchanged zoom draws nothing, and would leave its anchor for a later one.
+    if (to === zoom) return
     if (from) anchor.current = { x, y, gx: (x - from.left) / scale, gy: (y - from.top) / scale }
-    setZoom(Math.min(ZOOM.max, Math.max(Math.min(ZOOM.min, fit), next)))
+    setZoom(to)
+  }
+  /** The drawing's place and scale and the held point, as last drawn or scrolled. */
+  const seen = useRef<{ left: number; top: number; scale: number; hold: Point | undefined } | null>(null)
+  const see = () => {
+    const at = offset()
+    seen.current = at && { ...at, scale, hold }
   }
   useLayoutEffect(() => {
-    const [to, held] = [offset(), anchor.current]
+    const [to, zoomed, was] = [offset(), anchor.current, seen.current]
     anchor.current = null
-    if (!canvas || !to || !held) return
-    canvas.scrollLeft += to.left + held.gx * scale - held.x
-    canvas.scrollTop += to.top + held.gy * scale - held.y
-  }, [scale])
+    if (!canvas || !to) return
+    // Newly held or let go, the point is drawn where it was; only the margins around the drawing change.
+    const [now, from] = [hold ?? was?.hold, was?.hold ?? hold]
+    if (zoomed) {
+      canvas.scrollLeft += to.left + zoomed.gx * scale - zoomed.x
+      canvas.scrollTop += to.top + zoomed.gy * scale - zoomed.y
+    } else if (was && now && from) {
+      canvas.scrollLeft += to.left + now.x * scale - (was.left + from.x * was.scale)
+      canvas.scrollTop += to.top + now.y * scale - (was.top + from.y * was.scale)
+    }
+    see()
+  })
 
   // Pinch, or wheel with ctrl or cmd, zooms about the pointer. React's own wheel listener is passive and
   // can't stop the browser zooming the page instead; this one is re-added each render to see the current scale.
@@ -106,7 +126,8 @@ export function Canvas({ width, height, className, label, start = 'fit', onClear
     <>
       <div
         ref={setCanvas}
-        className={zoom === 'fit' ? 'canvas' : 'canvas pan'}
+        className={zoom === 'fit' && !hold ? 'canvas' : 'canvas pan'}
+        onScroll={see}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerEnd}
@@ -125,7 +146,12 @@ export function Canvas({ width, height, className, label, start = 'fit', onClear
           role="group"
           aria-label={label}
           viewBox={`0 0 ${width} ${height}`}
-          style={{ width: Math.floor(width * scale), height: Math.floor(height * scale) }}
+          // A held point can be anywhere in the drawing: a canvas of margin on each side lets it scroll to any place.
+          style={{
+            width: Math.floor(width * scale),
+            height: Math.floor(height * scale),
+            ...(hold && { margin: `${view.height}px ${view.width}px` }),
+          }}
         >
           {children}
         </svg>

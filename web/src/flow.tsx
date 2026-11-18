@@ -2,7 +2,7 @@ import ELK, { type ElkNode, type ElkPoint } from 'elkjs/lib/elk.bundled.js'
 import { useEffect, useMemo, useState } from 'react'
 import { Canvas } from './canvas'
 import { Choice, DIRECTIONS } from './dependencies'
-import { Input } from './flint'
+import { Button, Input } from './flint'
 import { press } from './items'
 import { type Crate, MODES, type Mode, type Place } from './report'
 
@@ -231,6 +231,8 @@ function Key({ kind, error = false, channel = false }: { kind?: Kind; error?: bo
 
 export function Flow({ crates }: { crates: Crate[] }) {
   const [picked, setPicked] = useState<string | null>(null)
+  /** The node kept in the drawing, and where it is on screen, while the focus moves. */
+  const [pinned, setPinned] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [hops, setHops] = useState(HOPS.start)
   const [walk, setWalk] = useState<Walk>('both')
@@ -243,12 +245,17 @@ export function Flow({ crates }: { crates: Crate[] }) {
   const focus = (picked !== null ? graph.nodes.get(picked) : undefined)
     ?? ranked.find(n => !n.fn && !n.external && n.errors === 0)
     ?? ranked[0]
-  const edges = useMemo(() => (focus ? slice(graph, focus.id, hops, walk) : []), [graph, focus, hops, walk])
+  const pin = pinned !== null ? graph.nodes.get(pinned) : undefined
+  /** The focus's slice and, with it, the pinned node's: where the two meet, the drawing joins them. */
+  const edges = useMemo(() => {
+    const starts = [...new Set([focus, pin])].filter((n): n is Node => n !== undefined)
+    return [...new Set(starts.flatMap(n => slice(graph, n.id, hops, walk)))]
+  }, [graph, focus, pin, hops, walk])
   const shown = useMemo(() => {
     const ids = new Set(edges.flatMap(e => [e.from, e.to]))
-    if (focus) ids.add(focus.id)
+    for (const n of [focus, pin]) if (n) ids.add(n.id)
     return [...ids].map(id => graph.nodes.get(id)).filter((n): n is Node => n !== undefined)
-  }, [graph, edges, focus])
+  }, [graph, edges, focus, pin])
 
   useEffect(() => {
     let stale = false
@@ -303,6 +310,7 @@ export function Flow({ crates }: { crates: Crate[] }) {
   }
 
   const drawn = layout !== 'failed' && layout?.width && layout.height ? layout : null
+  const held = drawn?.boxes.find(b => b.id === pin?.id)
   const count = (nodes: Iterable<Node>, fn: boolean) => [...nodes].filter(n => n.fn === fn).length
   const focusOn = (id: string) => {
     setPicked(id)
@@ -325,6 +333,7 @@ export function Flow({ crates }: { crates: Crate[] }) {
             className="dag flow"
             label={`Data flow around ${focus.label}. Arrows point from the types a function takes into it, and from it `
               + 'to the types it gives, boxed by module. Select a type or a function to centre the graph on it.'}
+            hold={held && { x: held.x + held.width / 2, y: held.y + held.height / 2 }}
             onClear={() => {}}
           >
             {drawn.frames.map(f => (
@@ -345,14 +354,15 @@ export function Flow({ crates }: { crates: Crate[] }) {
               return (
                 <g
                   key={box.id}
-                  className={`node${node.fn ? ' fn' : ''}${node === focus ? ' focus' : ''}`}
+                  className={`node${node.fn ? ' fn' : ''}${node === focus ? ' focus' : ''}${node === pin ? ' pinned' : ''}`}
                   transform={`translate(${box.x} ${box.y})`}
                   aria-pressed={node === focus}
-                  aria-label={`${node.fn ? 'Function' : 'Type'} ${node.label} in ${node.module}`}
+                  aria-label={`${node.fn ? 'Function' : 'Type'} ${node.label} in ${node.module}${node === pin ? ', pinned' : ''}`}
                   {...press(() => focusOn(node.id))}
                 >
                   <rect width={box.width} height={box.height} />
                   <text className="fl-g-value" x={box.width / 2} y={box.height / 2}>{node.label}</text>
+                  {node === pin && <path className="mark" d={`M${box.width - 8} 3h5v5h-5z`} />}
                 </g>
               )
             })}
@@ -367,6 +377,8 @@ export function Flow({ crates }: { crates: Crate[] }) {
             <div className="heading name">{focus.label}</div>
             <div className="code muted name">{focus.module}</div>
           </div>
+          <Button size="sm" onClick={() => setPinned(focus === pin ? null : focus.id)}>{focus === pin ? 'Unpin' : 'Pin'}</Button>
+          {pin && pin !== focus && <p className="small muted">{pin.label} is pinned, with its own slice. Pinning this moves the pin here.</p>}
           <Input label="Find type or function" type="search" placeholder="Name or module" value={query} onChange={e => setQuery(e.target.value)} />
           {wanted && (matches.length === 0 ? (
             <p className="small muted">Nothing matches. Only types and functions with a flow are listed.</p>
@@ -400,7 +412,7 @@ export function Flow({ crates }: { crates: Crate[] }) {
           <p className="small muted">
             {count(shown, false)} of {count(graph.nodes.values(), false)} types and {count(shown, true)} of{' '}
             {count(graph.nodes.values(), true)} functions shown. A hop is one arrow. A walk stops at an external type,
-            and shows errors next to the focus only.
+            and shows errors next to its start only.
           </p>
         </section>
 

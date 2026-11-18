@@ -20,8 +20,9 @@ per line) loads too.
 - `src/flow.tsx`: the type flow screen: the report's flows as a graph of types and the functions between them, sliced
   to what is within a few hops of one node and boxed by module. An arrow's colour and head give how a type is taken or
   given (move, read, mutate, convert); a dashed arrow ends at an error, and bars across one mark a channel. Selecting
-  a node centres the slice on it.
+  a node centres the slice on it; pinning one keeps it and its own slice drawn, and the node where it is on screen, as
+  the focus moves.
 - `src/dependencies.tsx`: the external dependencies screen, a layered graph laid out by `elkjs`.
-- `src/canvas.tsx`: the zooming, panning SVG canvas those three draw in.
+- `src/canvas.tsx`: the zooming, panning SVG canvas those three draw in. It can hold one drawing point still on screen.
 - `flint/`: the Flint design system's runtime files (tokens, fonts, component bundle). Styles in `src/app.css` use its
   tokens only.
