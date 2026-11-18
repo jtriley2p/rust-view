@@ -120,6 +120,13 @@ function Switch({ label, checked, onChange }: { label: string; checked: boolean;
   )
 }
 
+/** The set with `v` taken out if it was in, and put in if not. */
+export const flip = <T,>(set: ReadonlySet<T>, v: T) => {
+  const next = new Set(set)
+  if (!next.delete(v)) next.add(v)
+  return next
+}
+
 /** What makes an SVG group a button: a press, or Enter or Space, runs `act`. */
 export const press = (act: () => void) => ({
   role: 'button',
@@ -230,11 +237,6 @@ export function Items({ crates }: { crates: Crate[] }) {
       + (exporters ? ` and re-exported by ${exporters}.` : '.')
     : 'Open a module to see its items, then select one to see the modules that import it.'
 
-  const flip = <T,>(set: ReadonlySet<T>, v: T) => {
-    const next = new Set(set)
-    if (!next.delete(v)) next.add(v)
-    return next
-  }
   const listed = rows.flatMap(r => r.mod.items).filter(i => internal || i.public)
 
   return (

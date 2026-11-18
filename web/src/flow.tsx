@@ -1,9 +1,9 @@
 import ELK, { type ElkNode, type ElkPoint } from 'elkjs/lib/elk.bundled.js'
-import { useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { Canvas } from './canvas'
 import { Choice, DIRECTIONS } from './dependencies'
 import { Button, Input } from './flint'
-import { press } from './items'
+import { flip, press } from './items'
 import { type Crate, MODES, type Mode, type Place } from './report'
 
 const elk = new ELK()
@@ -57,6 +57,10 @@ type Node = {
 }
 /** An arrow from a type into a function, from a function to a type it gives, or between two types. */
 type Edge = { id: string; from: string; to: string; kind: Kind; error: boolean; channel: boolean }
+/** What an arrow is hidden by: its kind, or a mark any kind can carry. */
+type Trait = Kind | 'error' | 'channel'
+const hides = (hidden: ReadonlySet<Trait>, e: Edge) =>
+  hidden.has(e.kind) || (e.error && hidden.has('error')) || (e.channel && hidden.has('channel'))
 /** `out` and `into` are the arrows a walk leaves a node by, forward and backward. */
 type Graph = { nodes: Map<string, Node>; out: Map<string, Edge[]>; into: Map<string, Edge[]> }
 
@@ -121,9 +125,9 @@ const build = (crates: Crate[]): Graph => {
 /**
  * The arrows within `hops` of `focus`, forward and backward walked apart so a hub does not join the two.
  * A walk stops at an outside type, whose own flows are unknown. An error is a branch off the flow: none is
- * walked across, and only those of the focus and of the functions that take it are kept.
+ * walked across, and only those of the focus and of the functions that take it are kept. Nor is a hidden arrow.
  */
-const slice = (graph: Graph, focus: string, hops: number, walk: Walk): Edge[] => {
+const slice = (graph: Graph, focus: string, hops: number, walk: Walk, hidden: ReadonlySet<Trait>): Edge[] => {
   const shown = new Set<Edge>()
   const go = (forward: boolean) => {
     const seen = new Set([focus])
@@ -132,7 +136,7 @@ const slice = (graph: Graph, focus: string, hops: number, walk: Walk): Edge[] =>
       const next: string[] = []
       for (const id of layer) {
         for (const e of (forward ? graph.out : graph.into).get(id) ?? []) {
-          if (e.error && hop > Number(forward)) continue
+          if (hides(hidden, e) || (e.error && hop > Number(forward))) continue
           shown.add(e)
           const end = e.from === id ? e.to : e.from
           if (seen.has(end) || graph.nodes.get(end)?.external || e.error) continue
@@ -236,6 +240,7 @@ export function Flow({ crates }: { crates: Crate[] }) {
   const [query, setQuery] = useState('')
   const [hops, setHops] = useState(HOPS.start)
   const [walk, setWalk] = useState<Walk>('both')
+  const [hidden, setHidden] = useState<ReadonlySet<Trait>>(new Set())
   const [direction, setDirection] = useState<(typeof DIRECTIONS)[number]['id']>('RIGHT')
   const [layout, setLayout] = useState<Layout | 'failed' | null>(null)
 
@@ -249,8 +254,8 @@ export function Flow({ crates }: { crates: Crate[] }) {
   /** The focus's slice and, with it, the pinned node's: where the two meet, the drawing joins them. */
   const edges = useMemo(() => {
     const starts = [...new Set([focus, pin])].filter((n): n is Node => n !== undefined)
-    return [...new Set(starts.flatMap(n => slice(graph, n.id, hops, walk)))]
-  }, [graph, focus, pin, hops, walk])
+    return [...new Set(starts.flatMap(n => slice(graph, n.id, hops, walk, hidden)))]
+  }, [graph, focus, pin, hops, walk, hidden])
   const shown = useMemo(() => {
     const ids = new Set(edges.flatMap(e => [e.from, e.to]))
     for (const n of [focus, pin]) if (n) ids.add(n.id)
@@ -316,6 +321,16 @@ export function Flow({ crates }: { crates: Crate[] }) {
     setPicked(id)
     setQuery('')
   }
+  /** A legend row, which is also the switch that shows or hides its arrows. */
+  const row = (id: Trait, label: string, note: string, key: ReactNode) => (
+    <li key={id}>
+      <label className="keyed small switch">
+        {key}
+        <span>{label} <span className="muted">{note}</span></span>
+        <input type="checkbox" role="switch" checked={!hidden.has(id)} onChange={() => setHidden(flip(hidden, id))} />
+      </label>
+    </li>
+  )
   const wanted = query.trim().toLowerCase()
   const matches = wanted ? ranked.filter(n => `${n.module}::${n.label}`.toLowerCase().includes(wanted)) : []
 
@@ -419,23 +434,13 @@ export function Flow({ crates }: { crates: Crate[] }) {
         <section>
           <h2 className="heading">Arrows</h2>
           <p className="small muted">
-            A function, named with (), sits between the types it takes and the types it gives.
+            A function, named with (), sits between the types it takes and the types it gives. Switch a kind off to
+            hide its arrows; a walk does not cross a hidden arrow.
           </p>
           <ul className="plain">
-            {KINDS.map(k => (
-              <li key={k} className="keyed small">
-                <Key kind={k} />
-                <span>{KIND[k].label} <span className="muted">{KIND[k].note}</span></span>
-              </li>
-            ))}
-            <li className="keyed small">
-              <Key error />
-              <span>Error <span className="muted">the E of a Result</span></span>
-            </li>
-            <li className="keyed small">
-              <Key channel />
-              <span>Channel <span className="muted">sent, then received</span></span>
-            </li>
+            {KINDS.map(k => row(k, KIND[k].label, KIND[k].note, <Key kind={k} />))}
+            {row('error', 'Error', 'the E of a Result', <Key error />)}
+            {row('channel', 'Channel', 'sent, then received', <Key channel />)}
           </ul>
         </section>
 

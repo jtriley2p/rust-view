@@ -19,7 +19,8 @@ per line) loads too.
   draws arrows from it to the modules that import it and on from those that re-export it.
 - `src/flow.tsx`: the type flow screen: the report's flows as a graph of types and the functions between them, sliced
   to what is within a few hops of one node and boxed by module. An arrow's colour and head give how a type is taken or
-  given (move, read, mutate, convert); a dashed arrow ends at an error, and bars across one mark a channel. Selecting
+  given (move, read, mutate, convert); a dashed arrow ends at an error, and bars across one mark a channel. The legend's
+  switches hide a kind or a mark, and a walk does not cross a hidden arrow. Selecting
   a node centres the slice on it; pinning one keeps it and its own slice drawn, and the node where it is on screen, as
   the focus moves.
 - `src/dependencies.tsx`: the external dependencies screen, a layered graph laid out by `elkjs`.

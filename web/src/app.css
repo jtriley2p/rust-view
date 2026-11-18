@@ -310,6 +310,10 @@
 .keyed { display: flex; align-items: center; gap: var(--space-3); }
 /* a legend's sample is drawn at its own size, not its container's */
 .fl-gfx.key { flex: none; width: 48px; height: 16px; }
+/* a legend row that is also a switch: the switch sits at the row's end, and a row switched off recedes */
+.keyed.switch { color: inherit; }
+.keyed.switch > span { flex: 1; }
+.keyed.switch:not(:has(:checked)) span { color: var(--ink-subtle); }
 
 .picks { justify-self: stretch; margin: 0; padding: 0; list-style: none; border: var(--border-1) solid var(--stroke); }
 .picks li + li { border-top: var(--border-1) solid var(--stroke-subtle); }
