@@ -9,10 +9,10 @@ import { Overview } from './overview'
 import { type Loaded, describe, load } from './report'
 
 const SCREENS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'items', label: 'Module items' },
-  { id: 'flow', label: 'Type flow' },
-  { id: 'dependencies', label: 'External dependencies' },
+  { id: 'overview', label: 'Overview', main: 'main' },
+  { id: 'items', label: 'Module items', main: 'main fill' },
+  { id: 'flow', label: 'Type flow', main: 'main fill bleed' },
+  { id: 'dependencies', label: 'External dependencies', main: 'main fill bleed' },
 ] as const
 type Screen = (typeof SCREENS)[number]
 
@@ -91,13 +91,15 @@ function App() {
           />
         </div>
       </nav>
-      <main className={screen.id === 'overview' ? 'main' : 'main fill'}>
-        <h1 className="title">{screen.label}</h1>
-        {errors.length > 0 && (
-          <ul className="errors small" role="alert">
-            {errors.map((e, i) => <li key={i}>{describe(e)}</li>)}
-          </ul>
-        )}
+      <main className={screen.main}>
+        <header className="top">
+          <h1 className="title">{screen.label}</h1>
+          {errors.length > 0 && (
+            <ul className="errors small" role="alert">
+              {errors.map((e, i) => <li key={i}>{describe(e)}</li>)}
+            </ul>
+          )}
+        </header>
         {crates.length === 0 ? (
           <div className="empty">
             <p className="body">

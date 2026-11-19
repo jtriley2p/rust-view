@@ -246,7 +246,7 @@ export function Items({ crates }: { crates: Crate[] }) {
           {KINDS.map(k => [k, listed.filter(i => i.kind === k).length] as const).filter(([, n]) => n > 0).map(([k, n]) => (
             <label key={k} className="code">
               <input type="checkbox" checked={!hidden.has(k)} onChange={() => setHidden(flip(hidden, k))} />
-              {k}
+              <span className={`kind k-${k}`}>{k}</span>
               <span>{n}</span>
             </label>
           ))}
@@ -295,7 +295,7 @@ export function Items({ crates }: { crates: Crate[] }) {
                   {...press(() => setPicked(i === item ? null : i.id))}
                 >
                   <rect className="hit" x={2} width={width - 4} height={LINE} />
-                  <text className="fl-g-value faint" x={PAD} y={LINE / 2}>{i.kind}</text>
+                  <text className={`fl-g-value kind k-${i.kind}`} x={PAD} y={LINE / 2}>{i.kind}</text>
                   <text className="fl-g-value" x={PAD + KIND * ADVANCE} y={LINE / 2}>
                     {i.name}
                     {!i.public && <tspan> internal</tspan>}

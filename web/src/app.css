@@ -48,6 +48,8 @@
   padding: var(--space-8) var(--space-6) var(--space-12);
 }
 .main > * { margin: 0; min-width: 0; }
+.top { display: grid; gap: var(--space-6); }
+.top > * { margin: 0; }
 
 .muted { color: var(--ink-muted); }
 .row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
@@ -94,7 +96,10 @@
 .mods tbody tr:hover { background: var(--tint-hover); }
 .mods tr.crate > * { font-weight: 600; }
 .mods tbody tr:not(.crate) th { padding-left: var(--space-8); }
-.mods .path { margin-left: var(--space-2); font-weight: 400; color: var(--ink-subtle); }
+.mods .path { font-weight: 400; color: var(--ink-subtle); }
+.mods .crate .path { margin-left: var(--space-2); }
+/* a file takes two lines: its module path, then its file */
+.mods tr:not(.crate) .path { display: block; }
 
 .sort, .fold {
   margin: 0;
@@ -120,6 +125,12 @@
 .main.fill:has(> .panel) { padding-right: calc(var(--panel) + var(--space-6)); }
 .stage { position: relative; flex: 1; min-height: 0; border: var(--border-1) solid var(--stroke); }
 .stage > p { margin: var(--space-4); }
+/* type flow and dependencies: the title is a header strip, and the graph runs to the nav, the panel, and the window's foot */
+.main.bleed { gap: 0; padding: 0; }
+.main.bleed:has(> .panel) { padding-right: var(--panel); }
+.bleed > .top { padding: var(--space-4) var(--space-6); border-bottom: var(--border-1) solid var(--stroke); }
+.bleed > .stage { border: 0; }
+.bleed > :is(p, .empty) { margin: var(--space-6); }
 .canvas { display: flex; height: 100%; overflow: auto; }
 /* zoomed past fit, the canvas pans by dragging */
 .canvas.pan { cursor: grab; }
@@ -217,6 +228,15 @@
 .tree .node text { text-anchor: start; }
 .tree .node .end { text-anchor: end; }
 .tree .node .faint { fill: var(--ink-subtle); }
+/* a kind takes a chart colour, in the tree and on its filter: const and static share one, the rarer union and
+   macro borrow struct's and fn's, and type stays plain */
+.k-struct, .k-union { --kind: var(--chart-1); }
+.k-enum { --kind: var(--chart-2); }
+.k-trait { --kind: var(--chart-3); }
+.k-fn, .k-macro { --kind: var(--chart-4); }
+.k-const, .k-static { --kind: var(--chart-5); }
+.tree .node .kind { fill: var(--kind, var(--ink-subtle)); }
+.kinds .kind { color: var(--kind, inherit); }
 .tree .hit { fill: transparent; transition: fill var(--duration-ui) var(--ease-continuous); }
 .tree .item:hover .hit { fill: var(--tint-hover); }
 .tree .item[aria-pressed='true'] .hit { fill: var(--tint-active); }
@@ -343,8 +363,10 @@
   .tiles:not(.tiles-2) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .main.fill { height: auto; }
   .main.fill:has(> .panel) { padding-right: var(--space-6); }
+  .main.bleed:has(> .panel) { padding-right: 0; }
   .stage { flex: none; height: 70vh; }
   .panel { position: static; width: auto; border: var(--border-1) solid var(--stroke); }
+  .bleed > .panel { border-width: var(--border-1) 0 0; }
 }
 @media (max-width: 480px) {
   .tiles:not(.tiles-2) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
