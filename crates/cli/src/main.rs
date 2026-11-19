@@ -1,24 +1,37 @@
-//! `rust-view`: one JSON report per crate of the given cargo projects.
+//! `rust-view`: one JSON report per crate of the given cargo projects, kept in a store the
+//! dashboard reads.
 
 use rust_view_core::report::{self, DepKind, DepSource, Dependency};
-use rust_view_core::{CrateInput, Source, analyze};
-use serde::Deserialize;
+use rust_view_core::{CrateInput, Report, Source, analyze};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::ffi::OsString;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{env, fmt, fs, io};
 
 const USAGE: &str = "\
-usage: rust-view [-i PATH]... [-o DIR] [PATH]...
+usage: rust-view [-i PATH]... [-o DIR] [--open] [PATH]...
 
-Writes one JSON report per crate: one for a single crate, one per member for a workspace.
-PATH is a cargo project directory or its Cargo.toml (default: .).
+Reports on cargo projects, one report per crate, and keeps them in ~/.rust-view for the dashboard.
+PATH is a cargo project directory or its Cargo.toml.
 
   -i, --input PATH  report on PATH; repeatable, same as a bare PATH
-  -o, --out DIR     write DIR/<crate>.json instead of one report per line on stdout
+  -o, --out DIR     write DIR/<crate>.json instead; `-` prints one report per line
+      --open        open the dashboard in the browser, after any reports are written
   -h, --help        print this help
+
+$RUST_VIEW_HOME replaces ~/.rust-view, and $BROWSER the system's opener.
 ";
+
+/// The dashboard as one self-contained page, or a stub if it was not built (see `build.rs`).
+const PAGE: &str = include_str!(concat!(env!("OUT_DIR"), "/index.html"));
+
+/// What wraps the store's index in `index.js`. A `file://` page can run a script beside it but
+/// cannot fetch or list files, so the store is scripts that hand their JSON to the page.
+const INDEX: [&str; 2] = ["rustView.index(", ")"];
 
 #[derive(Debug)]
 enum Error {
@@ -39,6 +52,13 @@ enum Error {
         source: io::Error,
     },
     Encode(serde_json::Error),
+    /// There is no home directory to keep the store in.
+    NoHome,
+    /// The dashboard was written to `page` but the browser did not open it.
+    Open {
+        page: PathBuf,
+        message: String,
+    },
 }
 
 impl fmt::Display for Error {
@@ -53,6 +73,10 @@ impl fmt::Display for Error {
             Error::Outside(path) => write!(f, "{}: outside the workspace", path.display()),
             Error::Io { path, source } => write!(f, "{}: {source}", path.display()),
             Error::Encode(e) => write!(f, "encoding report: {e}"),
+            Error::NoHome => write!(f, "no home directory; set RUST_VIEW_HOME"),
+            Error::Open { page, message } => {
+                write!(f, "{}: could not open: {message}", page.display())
+            }
         }
     }
 }
@@ -115,8 +139,23 @@ struct NodeDepKind {
     kind: Option<DepKind>,
 }
 
+/// One project in the store's index, which runs oldest first.
+#[derive(Serialize, Deserialize)]
+struct Entry {
+    /// Names the project's script, `reports/<id>.js`.
+    id: String,
+    name: String,
+    /// The project directory.
+    path: String,
+    /// When the reports were written, in milliseconds since the epoch.
+    time: u64,
+    /// The reports' schema version.
+    version: u32,
+    crates: Vec<String>,
+}
+
 fn main() -> ExitCode {
-    let (mut paths, mut out) = (Vec::new(), None);
+    let (mut paths, mut out, mut open) = (Vec::new(), None, false);
     let mut args = env::args_os().skip(1);
     while let Some(arg) = args.next() {
         let usage = match arg.to_str() {
@@ -138,6 +177,11 @@ fn main() -> ExitCode {
                 }
                 None => Error::Usage("-o needs a directory".into()),
             },
+            Some("--open") => {
+                open = true;
+                continue;
+            }
+            Some("-") => Error::Usage("`-` is not a path; use `-o -` for stdout".into()),
             Some(flag) if flag.starts_with('-') => Error::Usage(format!("unknown option `{flag}`")),
             _ => {
                 paths.push(PathBuf::from(arg));
@@ -147,20 +191,21 @@ fn main() -> ExitCode {
         eprintln!("error: {usage}\n\n{USAGE}");
         return ExitCode::from(2);
     }
-    if paths.is_empty() {
-        paths.push(".".into());
+    if paths.is_empty() && !open {
+        eprint!("{USAGE}");
+        return ExitCode::from(2);
     }
     let mut code = ExitCode::SUCCESS;
-    for path in &paths {
-        if let Err(e) = export(path, out.as_deref()) {
-            eprintln!("error: {e}");
-            code = ExitCode::FAILURE;
-        }
+    let exports = paths.iter().map(|path| export(path, out.as_deref()));
+    for e in exports.chain(open.then(launch)).filter_map(Result::err) {
+        eprintln!("error: {e}");
+        code = ExitCode::FAILURE;
     }
     code
 }
 
-/// Reports on the package at `path`, or on every member if `path` is a workspace root.
+/// Reports on the package at `path`, or on every member if `path` is a workspace root. They go
+/// to the store, or to `out`: a directory, or `-` for stdout.
 fn export(path: &Path, out: Option<&Path>) -> Result<(), Error> {
     let manifest = match path.is_dir() {
         true => path.join("Cargo.toml"),
@@ -178,29 +223,143 @@ fn export(path: &Path, out: Option<&Path>) -> Result<(), Error> {
     if packages.peek().is_none() {
         return Err(Error::NoPackage(manifest));
     }
+    let mut reports = Vec::new();
     for package in packages {
         let analysis = analyze(&[input(package, &meta)]);
         for e in &analysis.errors {
             eprintln!("warning: {}: {e}", package.name);
         }
-        match out {
-            Some(dir) => {
-                let json = serde_json::to_string_pretty(&analysis.report).map_err(Error::Encode)?;
-                let path = dir.join(format!("{}.json", package.name));
-                fs::create_dir_all(dir)
-                    .and_then(|()| fs::write(&path, json + "\n"))
-                    .map_err(|source| Error::Io { path, source })?;
-            }
-            None => {
-                let json = serde_json::to_string(&analysis.report).map_err(Error::Encode)?;
-                writeln!(io::stdout(), "{json}").map_err(|source| Error::Io {
-                    path: "<stdout>".into(),
-                    source,
-                })?;
+        reports.push(analysis.report);
+    }
+    let Some(out) = out else {
+        return save(&manifest, &reports);
+    };
+    for report in &reports {
+        if out == Path::new("-") {
+            let json = serde_json::to_string(report).map_err(Error::Encode)?;
+            writeln!(io::stdout(), "{json}").map_err(|source| Error::Io {
+                path: "<stdout>".into(),
+                source,
+            })?;
+        } else {
+            let json = serde_json::to_string_pretty(report).map_err(Error::Encode)?;
+            if let Some(c) = report.crates.first() {
+                write(&out.join(format!("{}.json", c.name)), &(json + "\n"))?;
             }
         }
     }
     Ok(())
+}
+
+/// The store: `$RUST_VIEW_HOME`, else `~/.rust-view`.
+fn home() -> Result<PathBuf, Error> {
+    match env::var_os("RUST_VIEW_HOME").filter(|home| !home.is_empty()) {
+        Some(home) => Ok(home.into()),
+        None => env::home_dir()
+            .map(|home| home.join(".rust-view"))
+            .ok_or(Error::NoHome),
+    }
+}
+
+/// Writes `path`, creating its directory.
+fn write(path: &Path, contents: &str) -> Result<(), Error> {
+    path.parent()
+        .map_or(Ok(()), fs::create_dir_all)
+        .and_then(|()| fs::write(path, contents))
+        .map_err(|source| Error::Io {
+            path: path.to_path_buf(),
+            source,
+        })
+}
+
+/// Keeps the project's reports in the store, in place of its last ones, and lists it in the index.
+fn save(manifest: &Path, reports: &[Report]) -> Result<(), Error> {
+    let home = home()?;
+    let manifest = manifest
+        .canonicalize()
+        .unwrap_or_else(|_| manifest.to_path_buf());
+    let dir = manifest.parent().unwrap_or(Path::new("."));
+    let path = dir.display().to_string();
+    let name = dir
+        .file_name()
+        .map_or("project".into(), |name| name.to_string_lossy());
+    // The name for reading, and a hash of the path (FNV-1a) to tell same-named projects apart.
+    let slug: String = name
+        .chars()
+        .map(|c| match c {
+            c if c.is_ascii_alphanumeric() || "-_.".contains(c) => c,
+            _ => '_',
+        })
+        .collect();
+    let hash = path.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
+        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+    });
+    let id = format!("{slug}-{hash:08x}");
+    let script = |id: &str| home.join("reports").join(format!("{id}.js"));
+
+    let body = serde_json::to_string(reports).map_err(Error::Encode)?;
+    let key = serde_json::to_string(&id).map_err(Error::Encode)?;
+    write(&script(&id), &format!("rustView.report({key},{body})\n"))?;
+
+    let index = home.join("index.js");
+    let listed = |text: String| {
+        let entries = text.trim().strip_prefix(INDEX[0])?.strip_suffix(INDEX[1])?;
+        serde_json::from_str::<Vec<Entry>>(entries).ok()
+    };
+    let mut entries = match fs::read_to_string(&index) {
+        Ok(text) => listed(text).unwrap_or_else(|| {
+            eprintln!(
+                "warning: {}: not an index; starting a new one",
+                index.display()
+            );
+            Vec::new()
+        }),
+        Err(_) => Vec::new(),
+    };
+    // Drop this project's last entry, and any whose script has been deleted.
+    entries.retain(|e| e.id != id && script(&e.id).exists());
+    entries.push(Entry {
+        id,
+        name: name.into_owned(),
+        path,
+        time: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |since| since.as_millis() as u64),
+        version: report::VERSION,
+        crates: reports
+            .iter()
+            .flat_map(|r| &r.crates)
+            .map(|c| c.name.clone())
+            .collect(),
+    });
+    let entries = serde_json::to_string(&entries).map_err(Error::Encode)?;
+    write(&index, &format!("{}{entries}{}\n", INDEX[0], INDEX[1]))?;
+    write(&home.join("index.html"), PAGE)
+}
+
+/// Writes the dashboard into the store and opens it in the browser.
+fn launch() -> Result<(), Error> {
+    let page = home()?.join("index.html");
+    write(&page, PAGE)?;
+    let (program, args): (OsString, &[&str]) = match env::var_os("BROWSER") {
+        Some(browser) if !browser.is_empty() => (browser, &[]),
+        _ if cfg!(target_os = "macos") => ("open".into(), &[]),
+        _ if cfg!(windows) => ("cmd".into(), &["/C", "start", ""]),
+        _ => ("xdg-open".into(), &[]),
+    };
+    let failed = |message: String| Error::Open {
+        page: page.clone(),
+        message,
+    };
+    let status = Command::new(&program)
+        .args(args)
+        .arg(&page)
+        .status()
+        .map_err(|e| failed(format!("{}: {e}", program.display())))?;
+    match status.success() {
+        true => Ok(()),
+        false => Err(failed(format!("{}: {status}", program.display()))),
+    }
 }
 
 /// `cargo metadata` with dependencies resolved, or without if they can't be (e.g. offline).

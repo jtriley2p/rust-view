@@ -354,6 +354,10 @@
   transition: background-color var(--duration-ui) var(--ease-continuous);
 }
 :is(.pick, .outline button):hover { background: var(--tint-hover); }
+.pick[aria-current] { background: var(--tint-active); }
+/* the store's projects */
+.projects { max-width: 720px; }
+.projects .row { align-items: center; }
 :is(.pick, .outline button):focus-visible { outline: var(--border-2) solid var(--focus); outline-offset: calc(-1 * var(--border-2)); }
 
 /* the item tree: a module opens to its items, then its modules, a step in along a rule; rows bleed into the

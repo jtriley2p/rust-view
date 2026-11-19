@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun ./index.html",
-    "build": "bun build ./index.html --outdir dist --production",
+    "build": "rm -rf dist && bun build ./index.html --compile --target=browser --outdir dist --production",
     "check": "tsc --noEmit"
   },
   "dependencies": {

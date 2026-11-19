@@ -77,8 +77,8 @@ export type LoadError =
 
 export const describe = (e: LoadError): string => {
   switch (e.kind) {
-    case 'read': return `${e.file} could not be read. Check the file and open it again.`
-    case 'parse': return `${e.file} is not JSON. Open a report written by the rust-view CLI.`
+    case 'read': return `${e.file} could not be read. Run rust-view on the project again.`
+    case 'parse': return `${e.file} is not JSON. Drop a report written by the rust-view CLI.`
     case 'version': return `${e.file} is schema version ${String(e.found)}. Regenerate it with a CLI that writes version ${VERSION}.`
     case 'shape': return `${e.file} does not match the report schema at ${e.at}. Regenerate it with the current CLI.`
   }
@@ -155,14 +155,12 @@ const documents = (text: string): unknown[] | null => {
 
 export type Loaded = { crates: Crate[]; errors: LoadError[] }
 
-/** Merges every report in the given files. A crate listed twice keeps its last report. */
-export const load = (inputs: { name: string; text: string | null }[]): Loaded => {
+/** Merges parsed reports; `docs` is `null` for a source that could not be read. A crate listed twice keeps its last report. */
+export const merge = (sources: { name: string; docs: unknown[] | null }[]): Loaded => {
   const byName = new Map<string, Crate>()
   const errors: LoadError[] = []
-  for (const { name, text } of inputs) {
-    const docs = text === null ? null : documents(text)
-    if (text === null) errors.push({ kind: 'read', file: name })
-    else if (!docs || docs.length === 0) errors.push({ kind: 'parse', file: name })
+  for (const { name, docs } of sources) {
+    if (!docs) errors.push({ kind: 'read', file: name })
     for (const doc of docs ?? []) {
       const found = crates(name, doc)
       if (Array.isArray(found)) found.forEach(c => byName.set(c.name, c))
@@ -170,6 +168,18 @@ export const load = (inputs: { name: string; text: string | null }[]): Loaded =>
     }
   }
   return { crates: [...byName.values()], errors }
+}
+
+/** Merges every report in the given files' text. */
+export const load = (inputs: { name: string; text: string | null }[]): Loaded => {
+  const errors: LoadError[] = []
+  const sources = inputs.map(({ name, text }) => {
+    const docs = text === null ? null : documents(text)
+    if (text !== null && !docs?.length) errors.push({ kind: 'parse', file: name })
+    return { name, docs: text === null ? null : docs ?? [] }
+  })
+  const merged = merge(sources)
+  return { crates: merged.crates, errors: [...errors, ...merged.errors] }
 }
 
 const add = <T>(a: T, b: T): T =>

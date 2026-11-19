@@ -8,6 +8,7 @@ fn reports(path: &str) -> Vec<Report> {
     let project = Path::new(env!("CARGO_MANIFEST_DIR")).join(path);
     let output = Command::new(env!("CARGO_BIN_EXE_rust-view"))
         .arg(project)
+        .args(["-o", "-"])
         .output()
         .unwrap();
     assert!(
@@ -41,7 +42,7 @@ fn workspace_reports_each_crate() {
     );
     let cli = &reports[0].crates[0];
     assert_eq!(cli.path, "crates/cli");
-    assert_eq!(cli.files[0].path, "crates/cli/src/main.rs");
+    assert!(cli.files.iter().any(|f| f.path == "crates/cli/src/main.rs"));
     assert!(
         cli.dependencies
             .iter()
@@ -104,7 +105,7 @@ fn input_flag_targets_paths() {
             .output()
             .unwrap()
     };
-    let output = run(&["-i", "../core", "--input", "Cargo.toml"]);
+    let output = run(&["-i", "../core", "--input", "Cargo.toml", "-o", "-"]);
     let stdout = String::from_utf8(output.stdout).unwrap();
     let reports: Vec<Report> = stdout
         .lines()
@@ -112,4 +113,88 @@ fn input_flag_targets_paths() {
         .collect();
     assert_eq!(names(&reports), ["rust-view-core", "rust-view-cli"]);
     assert_eq!(run(&["-i"]).status.code(), Some(2));
+}
+
+#[test]
+fn no_arguments_prints_usage() {
+    let output = Command::new(env!("CARGO_BIN_EXE_rust-view"))
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).starts_with("usage: "));
+}
+
+/// The value a store script hands the page: `rustView.<call>(<value>)`.
+fn handed(path: &Path, call: &str) -> serde_json::Value {
+    let text = std::fs::read_to_string(path).unwrap();
+    let json = text
+        .trim()
+        .strip_prefix(&format!("rustView.{call}("))
+        .and_then(|rest| rest.strip_suffix(")"))
+        .unwrap();
+    serde_json::from_str(json).unwrap()
+}
+
+#[test]
+fn store_keeps_one_entry_per_project() {
+    let home = Path::new(env!("CARGO_TARGET_TMPDIR")).join("store");
+    let _ = std::fs::remove_dir_all(&home);
+    let run = |args: &[&str]| {
+        let output = Command::new(env!("CARGO_BIN_EXE_rust-view"))
+            .args(args)
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
+            .env("RUST_VIEW_HOME", &home)
+            .env("BROWSER", "true")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stdout.is_empty());
+    };
+    // Opening alone installs the page and reports on nothing.
+    run(&["--open"]);
+    assert!(home.join("index.html").exists());
+    assert!(!home.join("index.js").exists());
+
+    // A project run again replaces its entry and moves to the end.
+    run(&["../..", "."]);
+    run(&["../..", "--open"]);
+    let index = handed(&home.join("index.js"), "index");
+    let entries = index.as_array().unwrap();
+    let listed: Vec<_> = entries
+        .iter()
+        .map(|e| e["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(listed, ["cli", "rust-view"]);
+    assert_eq!(
+        entries[1]["crates"],
+        serde_json::json!(["rust-view-cli", "rust-view-core"])
+    );
+
+    let id = entries[1]["id"].as_str().unwrap();
+    let script = home.join("reports").join(format!("{id}.js"));
+    let text = std::fs::read_to_string(&script).unwrap();
+    let (key, reports) = text
+        .trim()
+        .strip_prefix("rustView.report(")
+        .and_then(|rest| rest.strip_suffix(")"))
+        .and_then(|rest| rest.split_once(','))
+        .unwrap();
+    assert_eq!(key, format!("\"{id}\""));
+    let reports: Vec<Report> = serde_json::from_str(reports).unwrap();
+    assert_eq!(names(&reports), ["rust-view-cli", "rust-view-core"]);
+
+    // An entry whose script is gone leaves the index on the next run.
+    std::fs::remove_file(script).unwrap();
+    run(&["."]);
+    assert_eq!(
+        handed(&home.join("index.js"), "index")
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
 }
