@@ -111,7 +111,7 @@ const follow = (item: Item, files: File[]): { flows: Flow[]; exporters: number }
 
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
-function Switch({ label, checked, onChange }: { label: string; checked: boolean; onChange: (on: boolean) => void }) {
+export function Switch({ label, checked, onChange }: { label: string; checked: boolean; onChange: (on: boolean) => void }) {
   return (
     <label className="switch label">
       {label}

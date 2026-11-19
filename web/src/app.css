@@ -186,6 +186,8 @@
 .panel :is(h2, p) { margin: 0; }
 .panel h2.label { color: var(--ink-subtle); }
 .panel .name { overflow-wrap: anywhere; }
+/* a switch on its own row: the label leads and the switch sits at the row's end */
+.panel section > .switch { justify-self: stretch; justify-content: space-between; }
 /* a section that folds: its whole heading is the button */
 .panel h2:has(.fold) { justify-self: stretch; }
 .panel h2 .fold { display: flex; width: 100%; text-align: left; }

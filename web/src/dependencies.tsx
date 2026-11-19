@@ -2,6 +2,7 @@ import ELK, { type ElkEdgeSection, type ElkNode, type ElkPoint } from 'elkjs/lib
 import { useEffect, useMemo, useState } from 'react'
 import { Canvas } from './canvas'
 import { Button } from './flint'
+import { Switch } from './items'
 import type { Crate } from './report'
 
 const elk = new ELK()
@@ -106,6 +107,8 @@ export function Dependencies({ crates }: { crates: Crate[] }) {
   const [picked, setPicked] = useState<string | null>(null)
   /** The deepest layer shown, direct dependencies by default; null shows them all. */
   const [limit, setLimit] = useState<number | null>(1)
+  /** Whether to draw the edges that lead no deeper: those between dependencies of one layer, or back to a shallower one. */
+  const [cross, setCross] = useState(false)
   const [direction, setDirection] = useState<(typeof DIRECTIONS)[number]['id']>('RIGHT')
   const [routing, setRouting] = useState<(typeof ROUTINGS)[number]['id']>('ORTHOGONAL')
   const [layout, setLayout] = useState<Layout | 'failed' | null>(null)
@@ -113,7 +116,16 @@ export function Dependencies({ crates }: { crates: Crate[] }) {
   const nodes = useMemo(() => merge(crates), [crates])
   const max = useMemo(() => Math.max(1, ...[...nodes.values()].map(n => n.depth).filter(Number.isFinite)), [nodes])
   const depth = Math.min(limit ?? max, max)
-  const shown = useMemo(() => new Map([...nodes].filter(([, n]) => n.depth <= depth)), [nodes, depth])
+  /** The packages within the depth limit, each left with only its edges on screen. */
+  const shown = useMemo(() => {
+    const within = [...nodes.values()].filter(n => n.depth <= depth)
+    const depths = new Map(within.map(n => [n.id, n.depth]))
+    const keep = (from: Node, to: string) => {
+      const d = depths.get(to)
+      return d !== undefined && (cross || from.depth === 0 || d > from.depth)
+    }
+    return new Map(within.map(n => [n.id, { ...n, out: new Set([...n.out].filter(to => keep(n, to))) }]))
+  }, [nodes, depth, cross])
 
   useEffect(() => {
     let stale = false
@@ -133,7 +145,7 @@ export function Dependencies({ crates }: { crates: Crate[] }) {
         height: HEIGHT,
       })),
       edges: [...shown.values()].flatMap(n =>
-        [...n.out].filter(to => shown.has(to)).map(to => ({ id: `${n.id} ${to}`, sources: [n.id], targets: [to] })),
+        [...n.out].map(to => ({ id: `${n.id} ${to}`, sources: [n.id], targets: [to] })),
       ),
     }
     elk.layout(graph).then(
@@ -157,7 +169,7 @@ export function Dependencies({ crates }: { crates: Crate[] }) {
     const todo = focus ? [focus.id] : []
     for (let id = todo.pop(); id !== undefined; id = todo.pop()) {
       for (const to of shown.get(id)?.out ?? []) {
-        if (!shown.has(to) || seen.has(to)) continue
+        if (seen.has(to)) continue
         seen.add(to)
         todo.push(to)
       }
@@ -266,7 +278,11 @@ export function Dependencies({ crates }: { crates: Crate[] }) {
               onChange={e => setLimit(Number(e.target.value) >= max ? null : Number(e.target.value))}
             />
           </label>
-          <p className="small muted">{shown.size} of {nodes.size} packages shown.</p>
+          <Switch label="Cross links" checked={cross} onChange={setCross} />
+          <p className="small muted">
+            {shown.size} of {nodes.size} packages shown.
+            {!cross && ' Links run only from a loaded crate or one layer deeper.'}
+          </p>
         </section>
 
         <section>
