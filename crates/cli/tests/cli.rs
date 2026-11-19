@@ -198,3 +198,35 @@ fn store_keeps_one_entry_per_project() {
         1
     );
 }
+
+/// The page reads the store as it loads, so the report has to be there first.
+#[cfg(unix)]
+#[test]
+fn open_follows_the_report() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
+    let home = tmp.join("open-store");
+    let _ = std::fs::remove_dir_all(&home);
+    // A browser that fails unless the index is beside the page it is given.
+    let browser = tmp.join("browser.sh");
+    std::fs::write(
+        &browser,
+        "#!/bin/sh\ntest -f \"$(dirname \"$1\")/index.js\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&browser, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_rust-view"))
+        .args([".", "--open"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("RUST_VIEW_HOME", &home)
+        .env("BROWSER", &browser)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    // No terminal, no spinner.
+    assert!(output.stderr.is_empty());
+}

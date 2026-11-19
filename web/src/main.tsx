@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import example from '../../crates/core/spec/example.json'
 import { Dependencies } from './dependencies'
@@ -87,6 +87,8 @@ function App() {
   const [listing, setListing] = useState(false)
   // Nothing is drawn until the store's first project has had its chance to load.
   const [ready, setReady] = useState(!STORED)
+  // When the newest report listed so far was written.
+  const newest = useRef(0)
 
   /** Shows `next`, or keeps what is on screen when none of it could be read. */
   const show = (next: Loaded, id: string | null) => {
@@ -108,6 +110,7 @@ function App() {
   const refresh = async () => {
     const found = await list()
     setEntries(found)
+    newest.current = found[0]?.time ?? 0
     return found
   }
   const openFiles = async (files: FileList | null) => {
@@ -118,11 +121,25 @@ function App() {
 
   useEffect(() => {
     const onHash = () => setScreen(current())
+    // The browser may bring this tab back instead of loading the page again, so a report the CLI wrote since is
+    // shown on return.
+    const onReturn = async () => {
+      const seen = newest.current
+      if (document.hidden) return
+      const found = await refresh()
+      if (found.length && found[0].time !== seen) pick(found[0], found)
+    }
     addEventListener('hashchange', onHash)
+    addEventListener('focus', onReturn)
+    document.addEventListener('visibilitychange', onReturn)
     refresh()
       .then(found => (found.length ? pick(recall(found), found) : undefined))
       .finally(() => setReady(true))
-    return () => removeEventListener('hashchange', onHash)
+    return () => {
+      removeEventListener('hashchange', onHash)
+      removeEventListener('focus', onReturn)
+      document.removeEventListener('visibilitychange', onReturn)
+    }
   }, [])
 
   const { crates, errors } = loaded

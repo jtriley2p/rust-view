@@ -6,11 +6,12 @@ use rust_view_core::{CrateInput, Report, Source, analyze};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::{env, fmt, fs, io};
+use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{env, fmt, fs, io, thread};
 
 const USAGE: &str = "\
 usage: rust-view [-i PATH]... [-o DIR] [--open] [PATH]...
@@ -139,6 +140,47 @@ struct NodeDepKind {
     kind: Option<DepKind>,
 }
 
+/// What is under way, which a terminal's stderr shows beside a spinner. Empty when nothing is.
+static STATUS: Mutex<String> = Mutex::new(String::new());
+
+/// The status with the spinner's line wiped, so what is printed while it is held starts a line.
+fn wiped() -> MutexGuard<'static, String> {
+    let status = STATUS.lock().unwrap_or_else(PoisonError::into_inner);
+    if !status.is_empty() && io::stderr().is_terminal() {
+        let _ = write!(io::stderr(), "\r{:1$}\r", "", status.chars().count() + 2);
+    }
+    status
+}
+
+/// Says what is under way, or with `""` that nothing is.
+fn status(text: &str) {
+    *wiped() = text.into();
+}
+
+/// Prints a line to stderr, clear of the spinner.
+fn note(line: &str) {
+    let _held = wiped();
+    let _ = writeln!(io::stderr(), "{line}");
+}
+
+/// Draws the spinner for as long as there is a status, if stderr is a terminal.
+fn spin() {
+    if !io::stderr().is_terminal() {
+        return;
+    }
+    thread::spawn(|| {
+        for frame in "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏".chars().cycle() {
+            {
+                let status = STATUS.lock().unwrap_or_else(PoisonError::into_inner);
+                if !status.is_empty() {
+                    let _ = write!(io::stderr(), "\r{frame} {status}");
+                }
+            }
+            thread::sleep(Duration::from_millis(80));
+        }
+    });
+}
+
 /// One project in the store's index, which runs oldest first.
 #[derive(Serialize, Deserialize)]
 struct Entry {
@@ -195,12 +237,19 @@ fn main() -> ExitCode {
         eprint!("{USAGE}");
         return ExitCode::from(2);
     }
-    let mut code = ExitCode::SUCCESS;
+    spin();
     let exports = paths.iter().map(|path| export(path, out.as_deref()));
-    for e in exports.chain(open.then(launch)).filter_map(Result::err) {
-        eprintln!("error: {e}");
+    // Lazy, so the page opens once every report it is to show is in the store.
+    let opened = open.then_some(()).into_iter().map(|()| {
+        status("");
+        launch()
+    });
+    let mut code = ExitCode::SUCCESS;
+    for e in exports.chain(opened).filter_map(Result::err) {
+        note(&format!("error: {e}"));
         code = ExitCode::FAILURE;
     }
+    status("");
     code
 }
 
@@ -211,23 +260,30 @@ fn export(path: &Path, out: Option<&Path>) -> Result<(), Error> {
         true => path.join("Cargo.toml"),
         false => path.to_path_buf(),
     };
+    status("reading cargo metadata");
     let meta = metadata(&manifest)?;
     let same = |a: &Path, b: &Path| matches!((a.canonicalize(), b.canonicalize()), (Ok(a), Ok(b)) if a == b);
     let workspace = same(&manifest, &meta.workspace_root.join("Cargo.toml"));
-    let mut packages = meta
+    let packages: Vec<_> = meta
         .packages
         .iter()
         .filter(|p| meta.workspace_members.contains(&p.id))
         .filter(|p| workspace || same(&manifest, &p.manifest_path))
-        .peekable();
-    if packages.peek().is_none() {
+        .collect();
+    if packages.is_empty() {
         return Err(Error::NoPackage(manifest));
     }
     let mut reports = Vec::new();
-    for package in packages {
+    for (i, package) in packages.iter().enumerate() {
+        status(&format!(
+            "analyzing {} ({}/{})",
+            package.name,
+            i + 1,
+            packages.len()
+        ));
         let analysis = analyze(&[input(package, &meta)]);
         for e in &analysis.errors {
-            eprintln!("warning: {}: {e}", package.name);
+            note(&format!("warning: {}: {e}", package.name));
         }
         reports.push(analysis.report);
     }
@@ -237,6 +293,7 @@ fn export(path: &Path, out: Option<&Path>) -> Result<(), Error> {
     for report in &reports {
         if out == Path::new("-") {
             let json = serde_json::to_string(report).map_err(Error::Encode)?;
+            let _held = wiped();
             writeln!(io::stdout(), "{json}").map_err(|source| Error::Io {
                 path: "<stdout>".into(),
                 source,
@@ -308,10 +365,10 @@ fn save(manifest: &Path, reports: &[Report]) -> Result<(), Error> {
     };
     let mut entries = match fs::read_to_string(&index) {
         Ok(text) => listed(text).unwrap_or_else(|| {
-            eprintln!(
+            note(&format!(
                 "warning: {}: not an index; starting a new one",
                 index.display()
-            );
+            ));
             Vec::new()
         }),
         Err(_) => Vec::new(),
@@ -366,7 +423,7 @@ fn launch() -> Result<(), Error> {
 fn metadata(manifest: &Path) -> Result<Metadata, Error> {
     query(manifest, &[]).or_else(|e| {
         let meta = query(manifest, &["--no-deps"])?;
-        eprintln!("warning: dependency graph omitted: {e}");
+        note(&format!("warning: dependency graph omitted: {e}"));
         Ok(meta)
     })
 }
@@ -408,12 +465,20 @@ fn input(package: &Package, meta: &Metadata) -> CrateInput {
     let mut files = Vec::new();
     for path in paths {
         let Some(rel) = relative(base, &path) else {
-            eprintln!("warning: {}: {}", package.name, Error::Outside(path));
+            note(&format!(
+                "warning: {}: {}",
+                package.name,
+                Error::Outside(path)
+            ));
             continue;
         };
         match fs::read_to_string(&path) {
             Ok(text) => files.push(Source { path: rel, text }),
-            Err(source) => eprintln!("warning: {}: {}", package.name, Error::Io { path, source }),
+            Err(source) => note(&format!(
+                "warning: {}: {}",
+                package.name,
+                Error::Io { path, source }
+            )),
         }
     }
     CrateInput {
