@@ -186,6 +186,9 @@
 .panel :is(h2, p) { margin: 0; }
 .panel h2.label { color: var(--ink-subtle); }
 .panel .name { overflow-wrap: anywhere; }
+/* a section that folds: its whole heading is the button */
+.panel h2:has(.fold) { justify-self: stretch; }
+.panel h2 .fold { display: flex; width: 100%; text-align: left; }
 
 .field { display: grid; justify-self: stretch; gap: var(--space-2); min-width: 0; margin: 0; padding: 0; border: 0; }
 .field .label { padding: 0; color: var(--ink-muted); }
@@ -337,7 +340,7 @@
 
 .picks { justify-self: stretch; margin: 0; padding: 0; list-style: none; border: var(--border-1) solid var(--stroke); }
 .picks li + li { border-top: var(--border-1) solid var(--stroke-subtle); }
-.pick {
+.pick, .outline button {
   display: grid;
   width: 100%;
   padding: var(--space-2) var(--space-3);
@@ -350,11 +353,24 @@
   cursor: pointer;
   transition: background-color var(--duration-ui) var(--ease-continuous);
 }
-.pick:hover { background: var(--tint-hover); }
-.pick:focus-visible { outline: var(--border-2) solid var(--focus); outline-offset: calc(-1 * var(--border-2)); }
+:is(.pick, .outline button):hover { background: var(--tint-hover); }
+:is(.pick, .outline button):focus-visible { outline: var(--border-2) solid var(--focus); outline-offset: calc(-1 * var(--border-2)); }
+
+/* the item tree: a module opens to its items, then its modules, a step in along a rule; rows bleed into the
+   section's padding so their marks sit on its edge */
+.outline, .outline ul { margin: 0; padding: 0; list-style: none; }
+.outline { justify-self: stretch; min-width: 0; margin: 0 calc(-1 * var(--space-2)); }
+.outline ul { margin-left: var(--space-4); border-left: var(--border-1) solid var(--stroke-subtle); }
+.outline button { display: flex; padding: var(--space-1) var(--space-2); }
+.outline .mark { flex: none; width: var(--space-4); text-align: center; color: var(--ink-subtle); }
+.outline button:hover .mark { color: var(--ink); }
+/* an item's name lines up with the modules' beside it */
+.outline .leaf { padding-left: calc(var(--space-2) + var(--space-4)); }
+.outline .leaf.muted { color: var(--ink-muted); }
+.outline .leaf[aria-current] { color: var(--ink); background: var(--tint-active); }
 
 @media (prefers-reduced-motion: reduce) {
-  .side-item, .sort, .fold, .seg label, .switch input::before, .kinds label, .pick { transition: none; }
+  .side-item, .sort, .fold, .seg label, .switch input::before, .kinds label, .pick, .outline button { transition: none; }
 }
 
 @media (max-width: 900px) {

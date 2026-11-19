@@ -50,6 +50,8 @@ type Node = {
   /** The box the node is drawn in: its module, or its crate if outside the loaded ones. */
   cluster: string
   group: string
+  /** Its target's root file, within its crate; empty for an outside type. */
+  root: string
   external: boolean
   /** How many arrows touch it, errors aside, and how many reach it as an error. */
   degree: number
@@ -95,6 +97,7 @@ const build = (crates: Crate[]): Graph => {
         module: module.replace(/^crate/, crate.name),
         cluster: `${crate.name} ${file.root} ${module}`,
         group: module.replace(/^crate/, crate.name),
+        root: file.root.replace(`${crate.path}/`, ''),
         external: false,
       })
       const type = (p: Place): Node => {
@@ -103,7 +106,7 @@ const build = (crates: Crate[]): Graph => {
         const home = cut < 0 ? p.module : p.module.slice(0, cut)
         const label = cut < 0 ? p.name : `${p.module.slice(cut + 2)}::${p.name}`
         return node(`outside ${home} ${label}`, {
-          fn: false, label, module: p.module, cluster: `outside ${home}`, group: `${home} (external)`, external: true,
+          fn: false, label, module: p.module, cluster: `outside ${home}`, group: `${home} (external)`, root: '', external: true,
         })
       }
       for (const f of file.flows) {
@@ -150,6 +153,38 @@ const slice = (graph: Graph, focus: string, hops: number, walk: Walk, hidden: Re
   if (walk !== 'backward') go(true)
   if (walk !== 'forward') go(false)
   return [...shown]
+}
+
+/** A module of a loaded target and the graph's nodes in it. A target's root takes its file as a `note`. */
+type Mod = { id: string; label: string; note: string; mods: Mod[]; nodes: Node[] }
+
+/**
+ * Each target's modules that hold a type or a function of the graph, as a tree. A root is named for its crate;
+ * its note is kept where the crate has several, the one under `src/` first.
+ */
+const outline = (graph: Graph): Mod[] => {
+  const mods = new Map<string, Mod>()
+  const roots: Mod[] = []
+  const mod = (root: string, module: string): Mod => {
+    const id = `${root} ${module}`
+    const found = mods.get(id)
+    if (found) return found
+    const cut = module.lastIndexOf('::')
+    const made: Mod = { id, label: module.slice(cut < 0 ? 0 : cut + 2), note: cut < 0 ? root : '', mods: [], nodes: [] }
+    mods.set(id, made)
+    ;(cut < 0 ? roots : mod(root, module.slice(0, cut)).mods).push(made)
+    return made
+  }
+  for (const n of graph.nodes.values()) if (!n.external) mod(n.root, n.module).nodes.push(n)
+  for (const m of mods.values()) {
+    m.mods.sort((a, b) => a.label.localeCompare(b.label))
+    m.nodes.sort((a, b) => Number(a.fn) - Number(b.fn) || a.label.localeCompare(b.label))
+  }
+  const main = (m: Mod) => Number(!m.note.startsWith('src/'))
+  roots.sort((a, b) => a.label.localeCompare(b.label) || main(a) - main(b) || a.note.localeCompare(b.note))
+  const shared = new Set(roots.filter((r, i) => r.label === roots[i + 1]?.label).map(r => r.label))
+  for (const r of roots) if (!shared.has(r.label)) r.note = ''
+  return roots
 }
 
 type Wire = { edge: Edge; line: string; head: string }
@@ -233,11 +268,29 @@ function Key({ kind, error = false, channel = false }: { kind?: Kind; error?: bo
   )
 }
 
+/** A panel section that opens under its heading. It starts closed. */
+function Fold({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <section>
+      <h2 className="heading">
+        <button type="button" className="fold" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <span className="mark">{open ? '−' : '+'}</span>
+          {title}
+        </button>
+      </h2>
+      {open && children}
+    </section>
+  )
+}
+
 export function Flow({ crates }: { crates: Crate[] }) {
   const [picked, setPicked] = useState<string | null>(null)
   /** The node kept in the drawing, and where it is on screen, while the focus moves. */
   const [pinned, setPinned] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  /** The modules opened in the item tree. */
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set())
   const [hops, setHops] = useState(HOPS.start)
   const [walk, setWalk] = useState<Walk>('both')
   const [hidden, setHidden] = useState<ReadonlySet<Trait>>(new Set())
@@ -246,6 +299,7 @@ export function Flow({ crates }: { crates: Crate[] }) {
 
   const graph = useMemo(() => build(crates), [crates])
   const ranked = useMemo(() => [...graph.nodes.values()].sort((a, b) => b.degree - a.degree), [graph])
+  const roots = useMemo(() => outline(graph), [graph])
   /** The picked node, or to begin with the busiest type of the loaded crates that is no error. */
   const focus = (picked !== null ? graph.nodes.get(picked) : undefined)
     ?? ranked.find(n => !n.fn && !n.external && n.errors === 0)
@@ -329,6 +383,27 @@ export function Flow({ crates }: { crates: Crate[] }) {
         <span>{label} <span className="muted">{note}</span></span>
         <input type="checkbox" role="switch" checked={!hidden.has(id)} onChange={() => setHidden(flip(hidden, id))} />
       </label>
+    </li>
+  )
+  /** A module of the item tree: opened, it lists its types and functions, each a press from the focus, then its modules. */
+  const branch = (m: Mod): ReactNode => (
+    <li key={m.id}>
+      <button type="button" className="code" aria-expanded={open.has(m.id)} onClick={() => setOpen(o => flip(o, m.id))}>
+        <span className="mark">{open.has(m.id) ? '−' : '+'}</span>
+        <span>{m.label}{m.note && <span className="muted"> {m.note}</span>}</span>
+      </button>
+      {open.has(m.id) && (
+        <ul>
+          {m.nodes.map(n => (
+            <li key={n.id}>
+              <button type="button" className={`code leaf${n.fn ? ' muted' : ''}`} aria-current={n === focus || undefined} onClick={() => focusOn(n.id)}>
+                {n.label}
+              </button>
+            </li>
+          ))}
+          {m.mods.map(branch)}
+        </ul>
+      )}
     </li>
   )
   const wanted = query.trim().toLowerCase()
@@ -415,7 +490,11 @@ export function Flow({ crates }: { crates: Crate[] }) {
         </section>
 
         <section>
-          <h2 className="heading">Slice</h2>
+          <h2 className="heading">Items</h2>
+          <ul className="outline">{roots.map(branch)}</ul>
+        </section>
+
+        <Fold title="Slice">
           <label className="field">
             <span className="between">
               <span className="label">Hops</span>
@@ -429,10 +508,9 @@ export function Flow({ crates }: { crates: Crate[] }) {
             {count(graph.nodes.values(), true)} functions shown. A hop is one arrow. A walk stops at an external type,
             and shows errors next to its start only.
           </p>
-        </section>
+        </Fold>
 
-        <section>
-          <h2 className="heading">Arrows</h2>
+        <Fold title="Arrows">
           <p className="small muted">
             A function, named with (), sits between the types it takes and the types it gives. Switch a kind off to
             hide its arrows; a walk does not cross a hidden arrow.
@@ -442,12 +520,11 @@ export function Flow({ crates }: { crates: Crate[] }) {
             {row('error', 'Error', 'the E of a Result', <Key error />)}
             {row('channel', 'Channel', 'sent, then received', <Key channel />)}
           </ul>
-        </section>
+        </Fold>
 
-        <section>
-          <h2 className="heading">Format</h2>
+        <Fold title="Format">
           <Choice legend="Direction" options={DIRECTIONS} value={direction} onChange={setDirection} />
-        </section>
+        </Fold>
       </aside>
     </>
   )
