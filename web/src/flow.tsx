@@ -16,7 +16,7 @@ const WALKS = [
 type Walk = (typeof WALKS)[number]['id']
 
 /** The furthest a slice reaches, and where it starts: a type's functions and what they connect it to. */
-const HOPS = { max: 6, start: 2 }
+const HOPS = { max: 6, start: 1 }
 /** The most types and functions the picker lists. */
 const PICKS = 8
 /** The height of a type and of a function, and the mono advance and side padding a width is estimated from. */

@@ -104,8 +104,8 @@ export function Choice<T extends string>({ legend, options, value, onChange }: {
 
 export function Dependencies({ crates }: { crates: Crate[] }) {
   const [picked, setPicked] = useState<string | null>(null)
-  /** The deepest layer shown; null shows them all. */
-  const [limit, setLimit] = useState<number | null>(null)
+  /** The deepest layer shown, direct dependencies by default; null shows them all. */
+  const [limit, setLimit] = useState<number | null>(1)
   const [direction, setDirection] = useState<(typeof DIRECTIONS)[number]['id']>('RIGHT')
   const [routing, setRouting] = useState<(typeof ROUTINGS)[number]['id']>('ORTHOGONAL')
   const [layout, setLayout] = useState<Layout | 'failed' | null>(null)
