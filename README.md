@@ -1,6 +1,6 @@
 # rust-view
 
-cargo project metricization & visualization dashboard.
+cargo project metrics & visualization dashboard.
 
 features:
 
